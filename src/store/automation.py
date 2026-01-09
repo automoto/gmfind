@@ -489,3 +489,46 @@ class SteamStoreAutomation:
                 return True
 
         return success is not None
+
+    async def verify_game_owned(self, app_id: int, game_name: str = "") -> bool:
+        """Verify a game is in the user's library after purchase.
+
+        Args:
+            app_id: Steam app ID to check.
+            game_name: Game name for logging.
+
+        Returns:
+            True if game is found in library.
+        """
+        if not self._page or not self._logged_in:
+            raise SteamStoreError("Not logged in")
+
+        logger.info(f"Verifying purchase of {game_name or app_id}...")
+
+        # Wait for Steam to process the purchase
+        await asyncio.sleep(5)
+
+        # Check the game's store page for "In Library" indicator
+        await self._page.goto(
+            f"https://store.steampowered.com/app/{app_id}",
+            wait_until="networkidle"
+        )
+        await asyncio.sleep(2)
+
+        page_content = await self._page.content()
+
+        # Check for ownership indicators
+        if "in library" in page_content.lower():
+            logger.info(f"Verified: {game_name or app_id} is in library")
+            return True
+
+        # Also check for "Play Game" button which indicates ownership
+        play_btn = await self._page.query_selector(
+            '.game_area_already_owned, [class*="InLibrary"], .already_in_library'
+        )
+        if play_btn:
+            logger.info(f"Verified: {game_name or app_id} is in library")
+            return True
+
+        logger.warning(f"Could not verify {game_name or app_id} in library - check manually")
+        return False

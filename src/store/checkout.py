@@ -207,13 +207,20 @@ class CheckoutFlow:
         await asyncio.sleep(2)
         await self._page.screenshot(path="debug_checkout.png")
 
-        # Check for insufficient wallet balance warning
-        page_content = await self._page.content()
-        if "wallet balance is too low" in page_content.lower():
-            raise SteamStoreError(
-                "Steam Wallet balance is too low to cover this transaction. "
-                "Please add funds to your Steam Wallet first."
-            )
+        # Check for insufficient wallet balance warning - only in error elements
+        error_elem = await self._page.query_selector(
+            '.checkout_error, .error_display, .error_message, [class*="error"]'
+        )
+        if error_elem:
+            try:
+                error_text = await error_elem.inner_text()
+                if "wallet balance" in error_text.lower() and "too low" in error_text.lower():
+                    raise SteamStoreError(
+                        "Steam Wallet balance is too low to cover this transaction. "
+                        "Please add funds to your Steam Wallet first."
+                    )
+            except Exception:
+                pass
 
         # The checkout flow may have multiple steps:
         # Step 1: Payment Info (select payment method)
@@ -237,19 +244,33 @@ class CheckoutFlow:
             logger.info("On review page, looking for final purchase button...")
 
             # Accept Steam Subscriber Agreement if present
-            ssa_checkbox = await self._page.query_selector(
-                '#accept_ssa, input[name="accept_ssa"], input[type="checkbox"]'
-            )
+            # Wait for page to fully load before interacting
+            await asyncio.sleep(5)
+            logger.debug("Looking for SSA checkbox...")
+            ssa_checkbox = await self._page.query_selector('#accept_ssa')
             if ssa_checkbox:
                 try:
                     is_visible = await ssa_checkbox.is_visible()
+                    logger.debug(f"SSA checkbox found, visible={is_visible}")
                     if is_visible:
                         is_checked = await ssa_checkbox.is_checked()
+                        logger.debug(f"SSA checkbox checked={is_checked}")
                         if not is_checked:
+                            logger.info("Accepting Steam Subscriber Agreement...")
                             await ssa_checkbox.click()
-                            await asyncio.sleep(0.5)
-                except Exception:
-                    pass
+                            await asyncio.sleep(1)
+                except Exception as e:
+                    logger.warning(f"Failed to click SSA checkbox: {e}")
+                    # Try clicking the label instead
+                    try:
+                        ssa_label = await self._page.query_selector('label[for="accept_ssa"]')
+                        if ssa_label:
+                            await ssa_label.click()
+                            await asyncio.sleep(1)
+                    except Exception:
+                        pass
+            else:
+                logger.debug("SSA checkbox not found")
 
             # Find the final purchase button
             final_btn = await self._find_checkout_button()

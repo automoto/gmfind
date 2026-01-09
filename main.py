@@ -170,6 +170,15 @@ async def run_bot(dry_run: bool = False, headless: bool = False):
             logger.info(f"  Game: {recommendation.name}")
             logger.info(f"  Price: {recommendation.price_formatted}")
             logger.info("=" * 60)
+
+            # Verify the game is now in the library
+            verified = await store.verify_game_owned(
+                recommendation.app_id, recommendation.name
+            )
+            if verified:
+                logger.info("Purchase verified - game is in library!")
+            else:
+                logger.warning("Could not verify game in library - please check manually")
         else:
             logger.error("Purchase may have failed - check your Steam account")
 
