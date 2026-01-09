@@ -1,0 +1,19 @@
+steam:
+  # Your Steam ID (64-bit). Find it at: https://steamid.io/
+  # Can also be set via STEAM_ID environment variable
+
+  steam_id: "76561198022001481"
+
+preferences:
+  # Maximum price in USD for a game purchase
+  max_price: 20.00
+
+  # Minimum Metacritic score (0-100)
+  min_metacritic_score: 75
+
+  # Minimum ProtonDB rating for Steam Deck compatibility
+  # Options: platinum, gold, silver, bronze, borked
+  min_protondb_rating: "gold"
+
+  # Maximum age of games to consider (in years)
+  max_game_age_years: 20

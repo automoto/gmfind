@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.steambot.weekly</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/mydev/code/steam-bot/scripts/run-weekly.sh</string>
+    </array>
+
+    <!-- Run every Sunday at 10:00 AM -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>10</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Run immediately if the scheduled time was missed (Mac was off/asleep) -->
+    <key>StartInterval</key>
+    <integer>604800</integer>
+
+    <!-- Environment variables - load from .env file via the shell script -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/Users/mydev/code/steam-bot</string>
+
+    <!-- Log errors -->
+    <key>StandardErrorPath</key>
+    <string>/Users/mydev/code/steam-bot/logs/launchd-error.log</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/mydev/code/steam-bot/logs/launchd-out.log</string>
+
+    <!-- Run even when no user is logged in (optional, remove if not needed) -->
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

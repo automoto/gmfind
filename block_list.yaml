@@ -1,0 +1,14 @@
+# Games to exclude from recommendations
+# Any game whose name partially matches these terms (case-insensitive) will be skipped
+# Examples: "FIFA" would block "FIFA 23", "FIFA 24", etc.
+
+blocked_terms:
+  # Add terms here, one per line
+  - "FIFA"
+  - "Madden"
+  - "NBA 2K"
+  - "Visual Novel"
+  - "half life"
+  - "cuphead"
+  - "assasins creed"
+  - "halo"
