@@ -48,6 +48,7 @@ test-results/
 logs/
 debug_*.png
 *.png
+*.csv
 
 # OS
 .DS_Store

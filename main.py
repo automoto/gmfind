@@ -13,6 +13,7 @@ from src.recommendations.steam_deck import SteamDeckClient
 from src.game_check import check_game
 from src.blocklist_checker import check_blocklist
 from src.inventory import SteamInventory
+from src.inventory_private import fetch_and_export
 from src.config import load_config
 
 # Configure logging
@@ -130,6 +131,31 @@ def main():
         help="Export user game library to CSV (default: inventory.csv)",
     )
     parser.add_argument(
+        "--inventory-private",
+        nargs="?",
+        const="inventory_private.csv",
+        metavar="FILENAME",
+        help="Export user game library to CSV using authenticated browser (for private profiles, default: inventory_private.csv)",
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        metavar="PATH",
+        help="Path to config.yaml (used for recommendations in --check-game)",
+    )
+    parser.add_argument(
+        "--block-list",
+        type=str,
+        metavar="PATH",
+        help="Path to block_list.yaml (used for recommendations in --check-game)",
+    )
+    parser.add_argument(
+        "--inventory",
+        type=str,
+        metavar="PATH",
+        help="Path to inventory CSV (e.g. my_games.csv) to exclude owned games from recommendations",
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Enable verbose debug logging",
@@ -149,11 +175,23 @@ def main():
     elif args.deck:
         check_steam_deck(args.deck)
     elif args.check_game:
-        check_game(args.check_game)
+        check_game(
+            args.check_game,
+            config_path=args.config,
+            block_list_path=args.block_list,
+            inventory_path=args.inventory,
+        )
     elif args.check_blocklist:
         check_blocklist(args.check_blocklist)
     elif args.inventory_csv:
         export_inventory(args.inventory_csv)
+    elif args.inventory_private:
+        try:
+            logger.info(f"Fetching private inventory to {args.inventory_private}...")
+            path = fetch_and_export(args.inventory_private)
+            print(f"\n[SUCCESS] Private inventory exported to {path}")
+        except Exception as e:
+            logger.error(f"Failed to export private inventory: {e}")
     else:
         parser.print_help()
 

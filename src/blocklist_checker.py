@@ -9,18 +9,22 @@ logger = logging.getLogger(__name__)
 BLOCK_LIST_FILE = Path("block_list.yaml")
 
 
-def load_block_list() -> list[str]:
-    """Load blocked terms from block_list.yaml.
+def load_block_list(file_path: Path | str = BLOCK_LIST_FILE) -> list[str]:
+    """Load blocked terms from a YAML file.
+
+    Args:
+        file_path: Path to the blocklist YAML file. Defaults to "block_list.yaml".
 
     Returns:
         List of blocked terms (lowercase).
     """
-    if not BLOCK_LIST_FILE.exists():
-        logger.warning(f"{BLOCK_LIST_FILE} not found.")
+    path = Path(file_path)
+    if not path.exists():
+        logger.warning(f"{path} not found.")
         return []
 
     try:
-        with open(BLOCK_LIST_FILE) as f:
+        with open(path) as f:
             data = yaml.safe_load(f)
 
         terms = data.get("blocked_terms", []) if data else []

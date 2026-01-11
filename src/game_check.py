@@ -1,16 +1,240 @@
 """Module to aggregate game data into structured JSON."""
 
+import csv
 import json
 import logging
+from datetime import datetime
+from pathlib import Path
 from typing import Any
+
 import requests
+
+from src.blocklist_checker import load_block_list
+from src.config import load_config
 from src.recommendations.protondb import ProtonDBClient
 from src.recommendations.steam_deck import SteamDeckClient
 
 logger = logging.getLogger(__name__)
 
 
-def check_game(app_id: str):
+def _load_owned_games(csv_path: str) -> set[int]:
+    """Load owned game App IDs from a CSV file.
+
+    Expects CSV to have a header with 'steam_id'.
+    """
+    owned_ids = set()
+    path = Path(csv_path)
+    if not path.exists():
+        logger.warning(f"Inventory file not found: {path}")
+        return owned_ids
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if "steam_id" in row and row["steam_id"]:
+                    try:
+                        owned_ids.add(int(row["steam_id"]))
+                    except ValueError:
+                        continue
+    except Exception as e:
+        logger.error(f"Failed to load inventory: {e}")
+    
+    return owned_ids
+
+
+def _fetch_store_data(app_id: int) -> dict[str, Any]:
+    """Fetch core game data from Steam Store API."""
+    try:
+        url = "https://store.steampowered.com/api/appdetails"
+        params = {"appids": str(app_id), "cc": "us", "l": "en"}
+        resp = requests.get(url, params=params, timeout=10)
+        data = resp.json()
+
+        if not data or not data.get(str(app_id), {}).get("success"):
+            return {"error": "Game not found or Region Locked"}
+
+        game_data = data[str(app_id)]["data"]
+        result = {
+            "name": game_data.get("name"),
+            "price_str": "Not Available",
+            "price_val": None,
+            "metacritic": None,
+            "metacritic_score": None,
+            "release_year": None,
+        }
+
+        # Price parsing
+        if game_data.get("is_free"):
+            result["price_str"] = "Free"
+            result["price_val"] = 0.0
+        elif "price_overview" in game_data:
+            result["price_str"] = game_data["price_overview"]["final_formatted"]
+            result["price_val"] = game_data["price_overview"]["final"] / 100.0
+
+        # Metacritic parsing
+        if "metacritic" in game_data:
+            result["metacritic"] = {
+                "score": game_data["metacritic"].get("score"),
+                "url": game_data["metacritic"].get("url"),
+            }
+            result["metacritic_score"] = game_data["metacritic"].get("score")
+
+        # Release Date parsing
+        release_date = game_data.get("release_date", {})
+        date_str = release_date.get("date")
+        if date_str:
+            try:
+                # Expecting format like "Apr 19, 2011" or "2011"
+                # Some dates are just "2023" or "TBA"
+                if len(date_str) >= 4:
+                    result["release_year"] = int(date_str.split(",")[-1].strip()[:4])
+            except (ValueError, IndexError):
+                logger.debug(f"Failed to parse release year from: {date_str}")
+
+        return result
+
+    except Exception as e:
+        return {"error": f"Store API Error: {str(e)}"}
+
+
+def _fetch_steam_deck_status(app_id: int) -> dict[str, Any] | None:
+    """Fetch Steam Deck verification status."""
+    try:
+        report = SteamDeckClient().get_status(app_id)
+        return {
+            "status": report.status,
+            "display": report.display_status,
+        }
+    except Exception as e:
+        logger.debug(f"Steam Deck check failed: {e}")
+        return None
+
+
+def _fetch_protondb_rating(app_id: int) -> dict[str, Any] | None:
+    """Fetch ProtonDB rating."""
+    try:
+        report = ProtonDBClient().get_rating(app_id)
+        return {
+            "tier": report.tier,
+            "score": report.score,
+            "confidence": report.confidence,
+        }
+    except Exception as e:
+        logger.debug(f"ProtonDB check failed: {e}")
+        return None
+
+
+def _fetch_steam_reviews(app_id: int) -> dict[str, Any] | None:
+    """Fetch Steam user reviews summary."""
+    try:
+        url = f"https://store.steampowered.com/appreviews/{app_id}"
+        params = {"json": "1", "language": "all"}
+        resp = requests.get(url, params=params, timeout=10)
+        data = resp.json()
+
+        if "query_summary" not in data:
+            return None
+
+        qs = data["query_summary"]
+        total = qs.get("total_reviews", 0)
+        pos = qs.get("total_positive", 0)
+        percent = int((pos / total) * 100) if total > 0 else 0
+
+        return {
+            "summary": qs.get("review_score_desc"),
+            "total": total,
+            "positive": pos,
+            "negative": qs.get("total_negative"),
+            "percent_positive": percent,
+        }
+    except Exception as e:
+        logger.debug(f"Review check failed: {e}")
+        return None
+
+
+def _check_recommendation(
+    game_data: dict[str, Any],
+    config_path: str | None,
+    block_list_path: str | None,
+    owned_games: set[int] | None = None,
+) -> dict[str, Any] | None:
+    """Determine if the game is recommended based on config, blocklist and inventory."""
+    if not config_path and not block_list_path and not owned_games:
+        return None
+
+    is_recommended = True
+    reasons = []
+
+    # Check Inventory
+    if owned_games and game_data["app_id"] in owned_games:
+        is_recommended = False
+        reasons.append("Game is already owned")
+
+    # Check Blocklist
+    if block_list_path and is_recommended:
+        name = game_data.get("name")
+        if name:
+            blocked_terms = load_block_list(block_list_path)
+            name_lower = name.lower()
+            for term in blocked_terms:
+                if term in name_lower:
+                    is_recommended = False
+                    reasons.append(f"Blocked term: {term}")
+                    break
+
+    # Check Config Criteria
+    if config_path and is_recommended:
+        try:
+            config = load_config(config_path)
+            prefs = config.preferences
+
+            # Price Check
+            price = game_data.get("_price_val")
+            if price is not None and price > prefs.max_price:
+                is_recommended = False
+                reasons.append(f"Price ${price} > ${prefs.max_price}")
+
+            # Metacritic Check
+            meta_score = game_data.get("_metacritic_score")
+            if meta_score is not None and meta_score < prefs.min_metacritic_score:
+                is_recommended = False
+                reasons.append(
+                    f"Metacritic {meta_score} < {prefs.min_metacritic_score}"
+                )
+
+            # Age Check
+            release_year = game_data.get("release_year")
+            if release_year:
+                current_year = datetime.now().year
+                age = current_year - release_year
+                if age > prefs.max_game_age_years:
+                    is_recommended = False
+                    reasons.append(f"Game age {age} years > {prefs.max_game_age_years}")
+
+            # ProtonDB Check
+            proton = game_data.get("protondb")
+            if proton:
+                tier = proton.get("tier")
+                if tier and not prefs.meets_protondb_rating(tier):
+                    is_recommended = False
+                    reasons.append(f"ProtonDB {tier} < {prefs.min_protondb_rating}")
+
+        except Exception as e:
+            logger.error(f"Config check failed: {e}")
+
+    result = {"recommended": is_recommended}
+    if not is_recommended:
+        result["reasons"] = reasons
+    return result
+
+
+def check_game(
+    app_id: str,
+    config_path: str | None = None,
+    block_list_path: str | None = None,
+    inventory_path: str | None = None,
+):
     """Fetch and print structured JSON data for a game."""
     try:
         app_id_int = int(app_id)
@@ -18,98 +242,36 @@ def check_game(app_id: str):
         print(json.dumps({"error": "Invalid App ID. Must be an integer."}, indent=2))
         return
 
-    output: dict[str, Any] = {
+    # 1. Store Data
+    store_info = _fetch_store_data(app_id_int)
+    if "error" in store_info:
+        print(json.dumps(store_info, indent=2))
+        return
+
+    output = {
         "app_id": app_id_int,
-        "name": None,
-        "price": None,
-        "steam_deck": None,
-        "protondb": None,
-        "metacritic": None,
-        "steam_reviews": None,
+        "name": store_info.get("name"),
+        "release_year": store_info.get("release_year"),
+        "price": store_info.get("price_str"),
+        "steam_deck": _fetch_steam_deck_status(app_id_int),
+        "protondb": _fetch_protondb_rating(app_id_int),
+        "metacritic": store_info.get("metacritic"),
+        "steam_reviews": _fetch_steam_reviews(app_id_int),
+        # Internal fields for validation, removed before printing
+        "_price_val": store_info.get("price_val"),
+        "_metacritic_score": store_info.get("metacritic_score"),
     }
 
-    # 1. Store API (Core Info, Price, Metacritic)
-    try:
-        store_url = "https://store.steampowered.com/api/appdetails"
-        params = {"appids": str(app_id), "cc": "us", "l": "en"}
-        resp = requests.get(store_url, params=params, timeout=10)
-        data = resp.json()
+    # 2. Recommendation Logic
+    owned_games = _load_owned_games(inventory_path) if inventory_path else None
+    recommendation = _check_recommendation(
+        output, config_path, block_list_path, owned_games
+    )
+    if recommendation:
+        output.update(recommendation)
 
-        if data and data.get(str(app_id), {}).get("success"):
-            game_data = data[str(app_id)]["data"]
-            output["name"] = game_data.get("name")
-
-            # Price
-            if game_data.get("is_free"):
-                output["price"] = "Free"
-            elif "price_overview" in game_data:
-                output["price"] = game_data["price_overview"]["final_formatted"]
-            else:
-                output["price"] = "Not Available"
-
-            # Metacritic (from Steam Metadata)
-            if "metacritic" in game_data:
-                output["metacritic"] = {
-                    "score": game_data["metacritic"].get("score"),
-                    "url": game_data["metacritic"].get("url"),
-                }
-        else:
-            output["error"] = "Game not found on Steam Store or Region Locked"
-            print(json.dumps(output, indent=2))
-            return
-
-    except Exception as e:
-        output["error"] = f"Store API Error: {str(e)}"
-        # If store fails, we might still want other info, but name is crucial.
-        # We continue to try others.
-
-    # 2. Steam Deck
-    try:
-        sd_client = SteamDeckClient()
-        sd_report = sd_client.get_status(app_id_int)
-        output["steam_deck"] = {
-            "status": sd_report.status,
-            "display": sd_report.display_status,
-        }
-    except Exception as e:
-        logger.debug(f"Steam Deck check failed: {e}")
-
-    # 3. ProtonDB
-    try:
-        pdb_client = ProtonDBClient()
-        pdb_report = pdb_client.get_rating(app_id_int)
-        output["protondb"] = {
-            "tier": pdb_report.tier,
-            "score": pdb_report.score,
-            "confidence": pdb_report.confidence,
-        }
-    except Exception as e:
-        logger.debug(f"ProtonDB check failed: {e}")
-
-    # 4. Steam Reviews
-    try:
-        review_url = f"https://store.steampowered.com/appreviews/{app_id}"
-        rev_params: dict[str, str | int] = {"json": "1", "language": "all"}
-        rev_resp = requests.get(review_url, params=rev_params, timeout=10)
-        rev_data = rev_resp.json()
-
-        if "query_summary" in rev_data:
-            qs = rev_data["query_summary"]
-            output["steam_reviews"] = {
-                "summary": qs.get("review_score_desc"),
-                "total": qs.get("total_reviews"),
-                "positive": qs.get("total_positive"),
-                "negative": qs.get("total_negative"),
-            }
-            # Calculate percent manually
-            total = qs.get("total_reviews", 0)
-            pos = qs.get("total_positive", 0)
-            if total > 0:
-                output["steam_reviews"]["percent_positive"] = int((pos / total) * 100)
-            else:
-                output["steam_reviews"]["percent_positive"] = 0
-
-    except Exception as e:
-        logger.debug(f"Review check failed: {e}")
+    # Cleanup internal fields
+    output.pop("_price_val", None)
+    output.pop("_metacritic_score", None)
 
     print(json.dumps(output, indent=2))

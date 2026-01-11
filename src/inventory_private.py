@@ -1,11 +1,11 @@
 """Steam inventory fetcher for private profiles using authenticated browser session."""
 
 import csv
+import json
 import logging
 import re
 import time
 from dataclasses import dataclass
-from pathlib import Path
 
 from playwright.sync_api import Page
 
@@ -21,6 +21,62 @@ class OwnedGame:
     title: str
 
 
+def extract_games_from_html(html_content: str) -> list[OwnedGame]:
+    """
+    Extract games from the user's Steam library page HTML using embedded JSON.
+    """
+    games = []
+
+    # Strategy 1: Extract from window.SSR.renderContext
+    # Steam embeds data in a double-escaped JSON string inside JSON.parse()
+    match = re.search(r'window\.SSR\.renderContext=JSON\.parse\("(.*?)"\);', html_content)
+    if match:
+        try:
+            # Unescape the JS string by parsing it as a JSON string literal
+            json_str = match.group(1)
+            render_context_str = json.loads(f'"{json_str}"')
+            render_context = json.loads(render_context_str)
+
+            query_data_str = render_context.get('queryData', '{}')
+            query_data = json.loads(query_data_str)
+
+            queries = query_data.get('queries', [])
+            for query in queries:
+                query_key = query.get('queryKey', [])
+                if isinstance(query_key, list) and len(query_key) > 0 and query_key[0] == 'OwnedGames':
+                    game_list = query.get('state', {}).get('data', [])
+                    for game in game_list:
+                        app_id = game.get('appid')
+                        name = game.get('name')
+                        if app_id and name:
+                            games.append(OwnedGame(app_id=int(app_id), title=str(name)))
+                    
+                    if games:
+                        logger.info(f"Extracted {len(games)} games from renderContext")
+                        return games
+        except Exception as e:
+            logger.debug(f"Failed to extract from renderContext: {e}")
+
+    # Strategy 2: Extract from window.SSR.loaderData (legacy fallback)
+    match = re.search(r'window\.SSR\.loaderData\s*=\s*(\[.*?\]);', html_content)
+    if match:
+        try:
+            loader_data = json.loads(match.group(1))
+            for item in loader_data:
+                if isinstance(item, str) and 'OwnedGames' in item:
+                    data = json.loads(item)
+                    game_list = data.get('listData', {}).get('rgRecentlyPlayedGames', [])
+                    for game in game_list:
+                        app_id = game.get('appid')
+                        name = game.get('name')
+                        if app_id and name:
+                            games.append(OwnedGame(app_id=int(app_id), title=str(name)))
+        except Exception as e:
+            logger.debug(f"Failed to extract from loaderData: {e}")
+
+    return games
+
+
 def fetch_games_from_library(page: Page) -> list[OwnedGame]:
     """
     Fetch all games from the user's Steam library page.
@@ -31,99 +87,74 @@ def fetch_games_from_library(page: Page) -> list[OwnedGame]:
     Returns:
         List of OwnedGame objects
     """
-    games = []
-
     # Navigate to user's game library
     logger.info("Navigating to game library...")
     page.goto("https://steamcommunity.com/my/games/?tab=all", wait_until="networkidle")
+    
+    # Wait a bit for the page context to be fully populated
     time.sleep(2)
 
-    # Check if we're on the games page (with or without trailing slash variations)
+    # Check if we're on the games page
     if "/games" not in page.url:
         logger.warning(f"Unexpected URL: {page.url}")
-        return games
+        return []
 
-    # Wait for games to load - Steam loads them dynamically
-    logger.info("Waiting for games to load...")
-    try:
-        page.wait_for_selector(".gameListRow, .gameslistitems_GamesListItemContainer_29H3o, [class*='GamesListItemContainer']", timeout=5000)
-    except Exception:
-        logger.info("No games found in library")
-        return games
+    # Get page content and try JSON extraction first (fastest and most reliable)
+    html_content = page.content()
+    games = extract_games_from_html(html_content)
+    
+    if games:
+        # Deduplicate and return
+        seen = set()
+        unique_games = []
+        for game in games:
+            if game.app_id not in seen:
+                seen.add(game.app_id)
+                unique_games.append(game)
+        logger.info(f"Successfully extracted {len(unique_games)} unique games from JSON")
+        return unique_games
 
-    # Scroll to load all games (Steam uses infinite scroll)
-    logger.info("Scrolling to load all games...")
-    last_count = 0
-    scroll_attempts = 0
-    max_scrolls = 50
-
-    while scroll_attempts < max_scrolls:
-        # Scroll down
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-        time.sleep(0.5)
-
-        # Count current games
-        current_count = page.locator(".gameListRow, [class*='GamesListItemContainer']").count()
-
-        if current_count == last_count:
-            scroll_attempts += 1
-            if scroll_attempts >= 3:
-                break
-        else:
-            scroll_attempts = 0
-            last_count = current_count
-
-    logger.info(f"Found {last_count} game elements")
-
-    # Try new Steam UI first (class names with hashes)
+    # Fallback to DOM parsing if JSON extraction failed
+    logger.info("JSON extraction failed, falling back to DOM parsing...")
+    
+    # Try new Steam UI DOM format
     game_rows = page.locator("[class*='GamesListItemContainer']").all()
+    games = []
 
     if game_rows:
-        logger.info("Parsing new Steam UI format...")
+        logger.info("Parsing new Steam UI DOM format...")
         for row in game_rows:
             try:
-                # Get the link which contains the app ID
                 link = row.locator("a[href*='/app/']").first
                 href = link.get_attribute("href") or ""
-
-                # Extract app ID from URL
                 app_match = re.search(r"/app/(\d+)", href)
                 if not app_match:
                     continue
                 app_id = int(app_match.group(1))
-
-                # Get game title
                 title_elem = row.locator("[class*='GameName'], [class*='gamename']").first
                 title = title_elem.inner_text().strip() if title_elem.count() > 0 else ""
-
                 if not title:
-                    # Fallback: try to get text from the link
                     title = link.inner_text().strip()
-
                 if title and app_id:
                     games.append(OwnedGame(app_id=app_id, title=title))
             except Exception as e:
                 logger.debug(f"Error parsing game row: {e}")
                 continue
 
-    # Fallback to old Steam UI
+    # Fallback to old Steam UI DOM format
     if not games:
-        logger.info("Trying old Steam UI format...")
+        logger.info("Trying old Steam UI DOM format...")
         game_rows = page.locator(".gameListRow").all()
 
         for row in game_rows:
             try:
-                # Get app ID from the row's ID attribute (format: "game_APPID")
                 row_id = row.get_attribute("id") or ""
                 app_match = re.search(r"game_(\d+)", row_id)
                 if not app_match:
                     continue
                 app_id = int(app_match.group(1))
-
-                # Get game title
                 title_elem = row.locator(".gameListRowItemName").first
                 title = title_elem.inner_text().strip() if title_elem.count() > 0 else ""
-
                 if title and app_id:
                     games.append(OwnedGame(app_id=app_id, title=title))
             except Exception as e:
@@ -138,7 +169,7 @@ def fetch_games_from_library(page: Page) -> list[OwnedGame]:
             seen.add(game.app_id)
             unique_games.append(game)
 
-    logger.info(f"Successfully parsed {len(unique_games)} unique games")
+    logger.info(f"Successfully parsed {len(unique_games)} unique games from DOM")
     return unique_games
 
 

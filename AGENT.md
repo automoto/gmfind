@@ -52,8 +52,12 @@ This command will:
     *   `--login`: Interactive headless login with 2FA support.
     *   `--balance`: Check wallet balance.
     *   `--check-game <APP_ID>`: Get full JSON report for a game.
+        *   `--config <PATH>`: Optional. Path to `config.yaml` for price/score/age recommendation logic.
+        *   `--block-list <PATH>`: Optional. Path to `block_list.yaml` to exclude games by title.
+        *   `--inventory <PATH>`: Optional. Path to inventory CSV (e.g. `my_games.csv`) to exclude owned games.
     *   `--check-blocklist <TITLE>`: Check if a game title matches the blocklist.
-    *   `--inventory-csv [FILENAME]`: Export your game library to CSV (default: inventory.csv).
+    *   `--inventory-csv [FILENAME]`: Export your game library to CSV using API (default: inventory.csv).
+    *   `--inventory-private [FILENAME]`: Export your game library to CSV using browser (for private profiles, default: inventory_private.csv).
     *   `--buy <APP_ID>`: Purchase a game (safety stop enabled by default).
 
 *   **Shortcuts:**
