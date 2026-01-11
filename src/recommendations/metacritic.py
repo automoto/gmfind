@@ -1,11 +1,11 @@
 """Metacritic scraper for game ratings and recommendations."""
 
-import asyncio
 import logging
 import re
+import time
 from dataclasses import dataclass
 
-import httpx
+import requests
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class MetacriticScraper:
         """Initialize the scraper."""
         self._cache: list[MetacriticGame] = []
 
-    async def fetch_top_rated_games(
+    def fetch_top_rated_games(
         self, min_score: int = 75, limit: int = 500, min_year: int | None = None
     ) -> list[MetacriticGame]:
         """Fetch top-rated PC games from Metacritic.
@@ -63,45 +63,48 @@ class MetacriticScraper:
                 filtered = [g for g in filtered if self._game_year(g) >= min_year]
             return filtered[:limit]
 
-        games = []
+        games: list[MetacriticGame] = []
         page = 1
 
-        async with httpx.AsyncClient(headers=self.HEADERS, follow_redirects=True) as client:
-            while len(games) < limit:
-                try:
-                    url = f"{self.BROWSE_URL}?page={page}"
-                    response = await client.get(url, timeout=30.0)
+        while len(games) < limit:
+            try:
+                url = f"{self.BROWSE_URL}?page={page}"
+                response = requests.get(
+                    url, headers=self.HEADERS, timeout=30.0, allow_redirects=True
+                )
 
-                    if response.status_code == 404:
-                        break
-
-                    response.raise_for_status()
-
-                    page_games = self._parse_browse_page(response.text)
-
-                    if not page_games:
-                        break
-
-                    # Filter by minimum score and year
-                    for game in page_games:
-                        if game.metascore >= min_score:
-                            if min_year and self._game_year(game) < min_year:
-                                continue  # Skip old games
-                            games.append(game)
-
-                    # Stop if scores drop below minimum
-                    if page_games and page_games[-1].metascore < min_score:
-                        break
-
-                    page += 1
-                    await asyncio.sleep(0.5)  # Rate limiting
-
-                except httpx.HTTPError as e:
-                    logger.warning(f"Failed to fetch Metacritic page {page}: {e}")
+                if response.status_code == 404:
                     break
 
+                response.raise_for_status()
+
+                page_games = self._parse_browse_page(response.text)
+
+                if not page_games:
+                    break
+
+                # Filter by minimum score and year
+                for game in page_games:
+                    if game.metascore >= min_score:
+                        if min_year and self._game_year(game) < min_year:
+                            continue  # Skip old games
+                        games.append(game)
+
+                # Stop if scores drop below minimum
+                if page_games and page_games[-1].metascore < min_score:
+                    break
+
+                page += 1
+                time.sleep(0.5)  # Rate limiting
+
+            except requests.RequestException as e:
+                logger.warning(f"Failed to fetch Metacritic page {page}: {e}")
+                break
+
         self._cache = games[:limit]
-        logger.info(f"Fetched {len(self._cache)} games from Metacritic (min_year={min_year})")
+        logger.info(
+            f"Fetched {len(self._cache)} games from Metacritic (min_year={min_year})"
+        )
         return self._cache
 
     def _game_year(self, game: MetacriticGame) -> int:
@@ -117,7 +120,7 @@ class MetacriticScraper:
             return 0
 
         # Try to extract 4-digit year from date string
-        match = re.search(r'\b(19|20)\d{2}\b', game.release_date)
+        match = re.search(r"\b(19|20)\d{2}\b", game.release_date)
         if match:
             return int(match.group())
         return 0
@@ -136,7 +139,9 @@ class MetacriticScraper:
 
         # Find game cards - Metacritic uses various class patterns
         # Try multiple selectors for robustness
-        game_cards = soup.select(".c-finderProductCard, .clamp-summary-wrap, [data-testid='product-card']")
+        game_cards = soup.select(
+            ".c-finderProductCard, .clamp-summary-wrap, [data-testid='product-card']"
+        )
 
         for card in game_cards:
             try:
@@ -197,7 +202,9 @@ class MetacriticScraper:
 
         # Find user score (optional)
         user_score = None
-        user_elem = card.select_one(".c-siteReviewScore_user, .user, [data-testid='user-score']")
+        user_elem = card.select_one(
+            ".c-siteReviewScore_user, .user, [data-testid='user-score']"
+        )
         if user_elem:
             try:
                 user_text = user_elem.get_text(strip=True)
@@ -219,7 +226,7 @@ class MetacriticScraper:
             url=url,
         )
 
-    async def search_game(self, name: str) -> MetacriticGame | None:
+    def search_game(self, name: str) -> MetacriticGame | None:
         """Search for a specific game on Metacritic.
 
         Args:
@@ -230,23 +237,24 @@ class MetacriticScraper:
         """
         search_url = f"{self.BASE_URL}/search/{name.replace(' ', '%20')}/?category=13"
 
-        async with httpx.AsyncClient(headers=self.HEADERS, follow_redirects=True) as client:
-            try:
-                response = await client.get(search_url, timeout=15.0)
-                response.raise_for_status()
+        try:
+            response = requests.get(
+                search_url, headers=self.HEADERS, timeout=15.0, allow_redirects=True
+            )
+            response.raise_for_status()
 
-                soup = BeautifulSoup(response.text, "html.parser")
+            soup = BeautifulSoup(response.text, "html.parser")
 
-                # Find first PC game result
-                results = soup.select(".c-pageSiteSearch-results .g-grid-container")
-                for result in results:
-                    platform_elem = result.select_one(".c-tagList")
-                    if platform_elem and "PC" in platform_elem.get_text():
-                        game = self._parse_game_card(result)
-                        if game:
-                            return game
+            # Find first PC game result
+            results = soup.select(".c-pageSiteSearch-results .g-grid-container")
+            for result in results:
+                platform_elem = result.select_one(".c-tagList")
+                if platform_elem and "PC" in platform_elem.get_text():
+                    game = self._parse_game_card(result)
+                    if game:
+                        return game
 
-            except httpx.HTTPError as e:
-                logger.warning(f"Metacritic search failed for '{name}': {e}")
+        except requests.RequestException as e:
+            logger.warning(f"Metacritic search failed for '{name}': {e}")
 
         return None

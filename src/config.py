@@ -69,11 +69,11 @@ def load_config(config_path: str | Path = "config.yaml") -> Config:
     """
     config_path = Path(config_path)
 
-    if not config_path.exists():
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
-
-    with open(config_path) as f:
-        yaml_config = yaml.safe_load(f) or {}
+    # Use existing config.yaml if it exists, otherwise use defaults/env vars
+    yaml_config: dict = {}
+    if config_path.exists():
+        with open(config_path) as f:
+            yaml_config = yaml.safe_load(f) or {}
 
     # Get credentials from environment variables (required)
     username = os.getenv("STEAM_USERNAME")
@@ -107,19 +107,26 @@ def load_config(config_path: str | Path = "config.yaml") -> Config:
 
     preferences = {
         "max_price": get_pref("STEAM_MAX_PRICE", "max_price", 20.0, float),
-        "min_metacritic_score": get_pref("STEAM_MIN_METACRITIC_SCORE", "min_metacritic_score", 75, int),
-        "min_protondb_rating": get_pref("STEAM_MIN_PROTONDB_RATING", "min_protondb_rating", "gold", str).lower(),
-        "max_game_age_years": get_pref("STEAM_MAX_GAME_AGE_YEARS", "max_game_age_years", 20, int),
+        "min_metacritic_score": get_pref(
+            "STEAM_MIN_METACRITIC_SCORE", "min_metacritic_score", 75, int
+        ),
+        "min_protondb_rating": get_pref(
+            "STEAM_MIN_PROTONDB_RATING", "min_protondb_rating", "gold", str
+        ).lower(),
+        "max_game_age_years": get_pref(
+            "STEAM_MAX_GAME_AGE_YEARS", "max_game_age_years", 20, int
+        ),
     }
 
     # Build configuration
-    config_dict = {
-        "steam": {
-            "username": username,
-            "password": password,
-            "steam_id": steam_id,
-        },
-        "preferences": preferences,
-    }
+    steam_config = SteamConfig(
+        username=username,
+        password=password,
+        steam_id=steam_id,
+    )
 
-    return Config(**config_dict)
+    # Only unpack preferences if they match the model
+    # For simplicity, we just pass the dict since Pydantic handles validation
+    preferences_config = PreferencesConfig(**preferences)
+
+    return Config(steam=steam_config, preferences=preferences_config)

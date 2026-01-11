@@ -1,9 +1,10 @@
 """Steam inventory checker - fetches user's owned games."""
 
 import logging
+import re
 from dataclasses import dataclass
 
-import httpx
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +40,10 @@ class SteamInventory:
         self._owned_games: list[OwnedGame] | None = None
         self._owned_app_ids: set[int] | None = None
 
-    async def fetch_owned_games(self) -> list[OwnedGame]:
+    def fetch_owned_games(self) -> list[OwnedGame]:
         """Fetch the list of games owned by the user.
 
-        Uses the public Steam API endpoint that doesn't require an API key
-        if the user's game list is set to public.
+        Uses the public Steam API endpoint.
 
         Returns:
             List of owned games.
@@ -54,167 +54,85 @@ class SteamInventory:
         if self._owned_games is not None:
             return self._owned_games
 
-        # Use the public endpoint via Steam's community data
         url = f"https://steamcommunity.com/profiles/{self.steam_id}/games/?tab=all&xml=1"
 
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            try:
-                response = await client.get(url, timeout=30.0)
-                response.raise_for_status()
-            except httpx.HTTPError as e:
-                raise SteamInventoryError(f"Failed to fetch owned games: {e}") from e
+        try:
+            response = requests.get(url, timeout=30.0, allow_redirects=True)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            raise SteamInventoryError(f"Failed to fetch owned games: {e}") from e
 
-            # Check if redirected to login (profile is private)
-            if "/login/" in str(response.url):
-                raise SteamInventoryError(
-                    "Steam profile game library is private. "
-                    "Please set your game details to public in Steam privacy settings."
-                )
+        if "/login/" in str(response.url) or "This profile is private" in response.text:
+            raise SteamInventoryError(
+                "Steam profile game library is private. "
+                "Please set your game details to public in Steam privacy settings."
+            )
 
-            # Parse XML response
-            content = response.text
+        games = self._parse_games_xml(response.text)
+        self._owned_games = games
+        self._owned_app_ids = {g.app_id for g in games}
 
-            if "This profile is private" in content:
-                raise SteamInventoryError(
-                    "Steam profile is private. Please set your game library to public."
-                )
-
-            games = self._parse_games_xml(content)
-            self._owned_games = games
-            self._owned_app_ids = {g.app_id for g in games}
-
-            logger.info(f"Fetched {len(games)} owned games from Steam")
-            return games
+        logger.info(f"Fetched {len(games)} owned games from Steam")
+        return games
 
     def _parse_games_xml(self, xml_content: str) -> list[OwnedGame]:
-        """Parse the games XML response from Steam.
-
-        Args:
-            xml_content: Raw XML string from Steam.
-
-        Returns:
-            List of OwnedGame objects.
-        """
-        import re
-
+        """Parse the games XML response from Steam."""
         games = []
-
-        # Extract game entries using regex (avoiding heavy XML parsing deps)
         game_pattern = re.compile(
             r"<game>.*?<appID>(\d+)</appID>.*?<name><!\[CDATA\[(.*?)\]\]></name>.*?"
             r"<hoursOnRecord>([\d.]+)</hoursOnRecord>.*?</game>",
             re.DOTALL,
         )
-
-        # Also match games with no playtime
         game_pattern_no_hours = re.compile(
             r"<game>.*?<appID>(\d+)</appID>.*?<name><!\[CDATA\[(.*?)\]\]></name>.*?</game>",
             re.DOTALL,
         )
 
         for match in game_pattern.finditer(xml_content):
-            app_id = int(match.group(1))
-            name = match.group(2)
-            hours = float(match.group(3))
-            games.append(
-                OwnedGame(app_id=app_id, name=name, playtime_minutes=int(hours * 60))
-            )
+            games.append(OwnedGame(int(match.group(1)), match.group(2), int(float(match.group(3)) * 60)))
 
-        # Get games without hours that weren't already matched
         matched_ids = {g.app_id for g in games}
         for match in game_pattern_no_hours.finditer(xml_content):
-            app_id = int(match.group(1))
-            if app_id not in matched_ids:
-                name = match.group(2)
-                games.append(OwnedGame(app_id=app_id, name=name, playtime_minutes=0))
+            if int(match.group(1)) not in matched_ids:
+                games.append(OwnedGame(int(match.group(1)), match.group(2), 0))
 
         return games
 
-    async def get_owned_app_ids(self) -> set[int]:
-        """Get the set of app IDs owned by the user.
-
-        Returns:
-            Set of owned app IDs.
-        """
+    def get_owned_app_ids(self) -> set[int]:
         if self._owned_app_ids is None:
-            await self.fetch_owned_games()
+            self.fetch_owned_games()
         return self._owned_app_ids or set()
 
-    def is_owned(self, app_id: int) -> bool:
-        """Check if a game is already owned.
+    def get_game_tags(self, app_id: int) -> list[str]:
+        try:
+            response = requests.get(
+                self.STORE_API_URL,
+                params={"appids": str(app_id), "cc": "us", "l": "en"},
+                timeout=15.0,
+            )
+            data = response.json()
+            game_data = data.get(str(app_id), {}).get("data", {})
+            tags = [g.get("description") for g in game_data.get("genres", [])]
+            tags.extend([c.get("description") for c in game_data.get("categories", [])])
+            return [t for t in tags if t]
+        except Exception:
+            return []
 
-        Args:
-            app_id: The Steam app ID to check.
-
-        Returns:
-            True if owned, False otherwise.
-
-        Raises:
-            RuntimeError: If owned games haven't been fetched yet.
-        """
-        if self._owned_app_ids is None:
-            raise RuntimeError("Call fetch_owned_games() first")
-        return app_id in self._owned_app_ids
-
-    async def get_game_tags(self, app_id: int) -> list[str]:
-        """Fetch tags/genres for a specific game from Steam store.
-
-        Args:
-            app_id: The Steam app ID.
-
-        Returns:
-            List of tag/genre strings.
-        """
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(
-                    self.STORE_API_URL,
-                    params={"appids": app_id, "cc": "us", "l": "en"},
-                    timeout=15.0,
-                )
-                response.raise_for_status()
-                data = response.json()
-
-                app_data = data.get(str(app_id), {})
-                if not app_data.get("success"):
-                    return []
-
-                game_data = app_data.get("data", {})
-                tags = []
-
-                # Get genres
-                for genre in game_data.get("genres", []):
-                    tags.append(genre.get("description", ""))
-
-                # Get categories
-                for cat in game_data.get("categories", []):
-                    tags.append(cat.get("description", ""))
-
-                return [t for t in tags if t]
-
-            except (httpx.HTTPError, KeyError):
-                logger.warning(f"Failed to fetch tags for app {app_id}")
-                return []
-
-    async def analyze_preferences(self) -> dict[str, int]:
-        """Analyze owned games to determine user preferences.
-
-        Returns:
-            Dictionary mapping tags/genres to frequency counts.
-        """
-        await self.fetch_owned_games()
-
+    def analyze_preferences(self) -> dict[str, int]:
+        self.fetch_owned_games()
         tag_counts: dict[str, int] = {}
-
-        # Sample top played games for preference analysis
-        sorted_games = sorted(
-            self._owned_games or [], key=lambda g: g.playtime_minutes, reverse=True
-        )
-        top_games = sorted_games[:20]  # Analyze top 20 most played
-
-        for game in top_games:
-            tags = await self.get_game_tags(game.app_id)
-            for tag in tags:
+        sorted_games = sorted(self._owned_games or [], key=lambda g: g.playtime_minutes, reverse=True)[:20]
+        for game in sorted_games:
+            for tag in self.get_game_tags(game.app_id):
                 tag_counts[tag] = tag_counts.get(tag, 0) + 1
-
         return tag_counts
+
+    def export_inventory_csv(self, filename: str = "inventory.csv") -> str:
+        import csv
+        games = self.fetch_owned_games()
+        with open(filename, mode='w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(["Title", "Steam ID"])
+            for game in games:
+                writer.writerow([game.name, game.app_id])
+        return filename

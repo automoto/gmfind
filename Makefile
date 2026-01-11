@@ -1,8 +1,24 @@
-.PHONY: install lint format type-check test clean run dry-run venv clean-all schedule unschedule schedule-status
+.PHONY: install lint format type-check check clean clean-all login balance help
 
 VENV := venv
 PYTHON := $(VENV)/bin/python3
 PIP := $(VENV)/bin/pip
+
+# Default target
+help:
+	@echo "Steam Bot CLI Makefile"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make install      Create venv and install dependencies"
+	@echo "  make login        Run headless login flow"
+	@echo "  make balance      Check Steam Wallet balance"
+	@echo "  make lint         Run ruff linter"
+	@echo "  make format       Format code with ruff"
+	@echo "  make check        Run lint and type checks"
+	@echo "  make clean        Remove cache files"
+	@echo "  make clean-all    Remove cache files and venv"
+	@echo "  make schedule     Schedule weekly run (macOS)"
+	@echo "  make unschedule   Unschedule weekly run"
 
 # Create virtual environment and install dependencies
 venv: $(VENV)/bin/activate
@@ -13,7 +29,7 @@ $(VENV)/bin/activate:
 	$(PIP) install -r requirements.txt
 	$(PIP) install ruff mypy
 	$(VENV)/bin/playwright install chromium
-	@echo "Virtual environment created. Run 'make run' or 'make dry-run'"
+	@echo "Virtual environment created."
 
 # Install dependencies (into existing venv)
 install: venv
@@ -47,24 +63,12 @@ clean:
 clean-all: clean
 	rm -rf $(VENV)
 
-# Run the bot (dry run)
-dry-run: venv
-	$(PYTHON) main.py --dry-run
+# Shortcuts for common actions
+login: venv
+	$(PYTHON) src/steam_auth.py
 
-# Run the bot for real
-run: venv
-	$(PYTHON) main.py
-
-# Run headless
-run-headless: venv
-	$(PYTHON) main.py --headless
-
-dry-run-headless: venv
-	$(PYTHON) main.py --dry-run --headless
-
-# Test checkout selectors interactively
-test-checkout: venv
-	$(PYTHON) test_checkout.py
+balance: venv
+	$(PYTHON) main.py --balance
 
 # Schedule weekly run (macOS launchd)
 schedule: venv
@@ -72,7 +76,6 @@ schedule: venv
 	@cp scripts/com.steambot.weekly.plist ~/Library/LaunchAgents/
 	launchctl load ~/Library/LaunchAgents/com.steambot.weekly.plist
 	@echo "Scheduled! Will run every Sunday at 10:00 AM"
-	@echo "View status: make schedule-status"
 	@echo "Logs: logs/weekly.log"
 
 # Unschedule weekly run
@@ -89,6 +92,5 @@ schedule-status:
 	@echo "=== Recent Log ==="
 	@tail -20 logs/weekly.log 2>/dev/null || echo "No logs yet"
 
-# Test the scheduled script manually
-test-schedule:
-	./scripts/run-weekly.sh
+recommend:
+	gemini "Search the web for the best Steam Deck Verified games released since 2010 and randomly pick one single game to recommend. Return ONLY the numeric Steam App ID." | grep -oE '[0-9]+' | head -n1 | xargs venv/bin/python main.py --check-game
