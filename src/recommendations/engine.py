@@ -124,7 +124,7 @@ class RecommendationEngine:
         min_year = datetime.now().year - self.preferences.max_game_age_years
         metacritic_games = await self.metacritic.fetch_top_rated_games(
             min_score=self.preferences.min_metacritic_score,
-            limit=200,
+            limit=500,
             min_year=min_year,
         )
         logger.info(f"Filtering to games from {min_year} or later ({self.preferences.max_game_age_years} year limit)")
@@ -134,6 +134,20 @@ class RecommendationEngine:
         # Step 3: Find Steam app IDs and filter
         recommendations = []
 
+        # Track filter stats
+        filter_stats = {
+            "blocked": 0,
+            "not_on_steam": 0,
+            "already_owned": 0,
+            "free_game": 0,
+            "too_expensive": 0,
+            "mod_or_dlc": 0,
+            "third_party_account": 0,
+            "deck_unsupported": 0,
+            "protondb_low": 0,
+            "passed": 0,
+        }
+
         for mc_game in metacritic_games:
             if len(recommendations) >= limit * 3:  # Get extra for filtering
                 break
@@ -141,11 +155,13 @@ class RecommendationEngine:
             # Early block list check on Metacritic name
             if self._is_blocked(mc_game.name):
                 logger.debug(f"Skipping {mc_game.name} - matches block list")
+                filter_stats["blocked"] += 1
                 continue
 
             # Search for game on Steam
             steam_data = await self._find_steam_game(mc_game.name)
             if not steam_data:
+                filter_stats["not_on_steam"] += 1
                 continue
 
             app_id = steam_data["app_id"]
@@ -153,38 +169,45 @@ class RecommendationEngine:
             # Check block list
             if self._is_blocked(steam_data["name"]):
                 logger.debug(f"Skipping {steam_data['name']} - matches block list")
+                filter_stats["blocked"] += 1
                 continue
 
             # Skip if already owned
             if app_id in owned_ids:
                 logger.debug(f"Skipping {mc_game.name} - already owned")
+                filter_stats["already_owned"] += 1
                 continue
 
             # Skip free games (no free-to-play or mods)
             if steam_data["price"] <= 0:
                 logger.debug(f"Skipping {mc_game.name} - free game/mod")
+                filter_stats["free_game"] += 1
                 continue
 
             # Check price
             if steam_data["price"] > self.preferences.max_price:
                 logger.debug(f"Skipping {mc_game.name} - price ${steam_data['price']:.2f} exceeds limit")
+                filter_stats["too_expensive"] += 1
                 continue
 
             # Skip if it looks like a mod or DLC (basic heuristic)
             name_lower = steam_data["name"].lower()
             if any(x in name_lower for x in ["mod", "dlc", "soundtrack", "artbook", "skin pack"]):
                 logger.debug(f"Skipping {mc_game.name} - appears to be mod/DLC")
+                filter_stats["mod_or_dlc"] += 1
                 continue
 
             # Skip games requiring 3rd party accounts
             if steam_data.get("requires_3rd_party"):
                 logger.debug(f"Skipping {steam_data['name']} - requires 3rd party account: {steam_data.get('third_party_notice', '')[:50]}")
+                filter_stats["third_party_account"] += 1
                 continue
 
             # Check Steam Deck compatibility (from Steam's own verification)
             deck_status = await self._get_steam_deck_status(app_id)
             if deck_status == "unsupported":
                 logger.debug(f"Skipping {steam_data['name']} - Steam Deck unsupported")
+                filter_stats["deck_unsupported"] += 1
                 continue
 
             # Check ProtonDB rating
@@ -193,7 +216,10 @@ class RecommendationEngine:
                 protondb_report, self.preferences.min_protondb_rating
             ):
                 logger.debug(f"Skipping {mc_game.name} - ProtonDB rating '{protondb_report.tier}' below threshold")
+                filter_stats["protondb_low"] += 1
                 continue
+
+            filter_stats["passed"] += 1
 
             # Calculate preference match score
             game_tags = steam_data.get("tags", [])
@@ -222,6 +248,17 @@ class RecommendationEngine:
 
             # Rate limiting
             await asyncio.sleep(0.5)
+
+        # Log filter statistics
+        logger.info(f"Filter results: {filter_stats['passed']} passed, "
+                    f"{filter_stats['too_expensive']} too expensive, "
+                    f"{filter_stats['not_on_steam']} not on Steam, "
+                    f"{filter_stats['blocked']} blocked, "
+                    f"{filter_stats['already_owned']} owned, "
+                    f"{filter_stats['free_game']} free, "
+                    f"{filter_stats['third_party_account']} 3rd party account, "
+                    f"{filter_stats['deck_unsupported']} Deck unsupported, "
+                    f"{filter_stats['protondb_low']} ProtonDB low")
 
         # Shuffle and return random selection from qualifying games
         if recommendations:

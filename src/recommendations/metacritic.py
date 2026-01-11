@@ -45,7 +45,7 @@ class MetacriticScraper:
         self._cache: list[MetacriticGame] = []
 
     async def fetch_top_rated_games(
-        self, min_score: int = 75, limit: int = 100, min_year: int | None = None
+        self, min_score: int = 75, limit: int = 500, min_year: int | None = None
     ) -> list[MetacriticGame]:
         """Fetch top-rated PC games from Metacritic.
 
@@ -94,7 +94,7 @@ class MetacriticScraper:
                         break
 
                     page += 1
-                    await asyncio.sleep(1.0)  # Rate limiting
+                    await asyncio.sleep(0.5)  # Rate limiting
 
                 except httpx.HTTPError as e:
                     logger.warning(f"Failed to fetch Metacritic page {page}: {e}")

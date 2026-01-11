@@ -2,6 +2,7 @@
 .env
 *.env.local
 steam_session.json
+steam_browser_auth.json
 
 # Python
 __pycache__/
