@@ -14,8 +14,10 @@ load_dotenv()
 
 
 ProtonDBRating = Literal["platinum", "gold", "silver", "bronze", "borked"]
-
 PROTONDB_RATING_ORDER = ["platinum", "gold", "silver", "bronze", "borked"]
+
+SteamDeckLevel = Literal["verified", "playable", "unsupported", "unknown"]
+STEAM_DECK_LEVEL_ORDER = ["verified", "playable", "unsupported", "unknown"]
 
 
 class SteamConfig(BaseModel):
@@ -33,6 +35,7 @@ class PreferencesConfig(BaseModel):
     min_metacritic_score: int = Field(default=75, ge=0, le=100)
     min_protondb_rating: ProtonDBRating = Field(default="gold")
     max_game_age_years: int = Field(default=20, ge=1, le=50)
+    min_steam_deck_level: SteamDeckLevel = Field(default="playable")
 
     def meets_protondb_rating(self, rating: str) -> bool:
         """Check if a game's ProtonDB rating meets the minimum requirement."""
@@ -42,6 +45,17 @@ class PreferencesConfig(BaseModel):
         min_index = PROTONDB_RATING_ORDER.index(self.min_protondb_rating)
         rating_index = PROTONDB_RATING_ORDER.index(rating_lower)
         return rating_index <= min_index
+
+    def meets_steam_deck_level(self, level: str) -> bool:
+        """Check if a game's Steam Deck level meets the minimum requirement."""
+        level_lower = level.lower()
+        if level_lower not in STEAM_DECK_LEVEL_ORDER:
+            return False
+        min_index = STEAM_DECK_LEVEL_ORDER.index(self.min_steam_deck_level)
+        level_index = STEAM_DECK_LEVEL_ORDER.index(level_lower)
+        # Order is verified (0), playable (1), unsupported (2), unknown (3)
+        # So we want level_index <= min_index
+        return level_index <= min_index
 
 
 class Config(BaseModel):

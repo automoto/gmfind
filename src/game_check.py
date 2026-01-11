@@ -22,7 +22,7 @@ def _load_owned_games(csv_path: str) -> set[int]:
 
     Expects CSV to have a header with 'steam_id'.
     """
-    owned_ids = set()
+    owned_ids: set[int] = set()
     path = Path(csv_path)
     if not path.exists():
         logger.warning(f"Inventory file not found: {path}")
@@ -43,7 +43,7 @@ def _load_owned_games(csv_path: str) -> set[int]:
     return owned_ids
 
 
-def _fetch_store_data(app_id: int) -> dict[str, Any]:
+def fetch_store_data(app_id: int) -> dict[str, Any]:
     """Fetch core game data from Steam Store API."""
     try:
         url = "https://store.steampowered.com/api/appdetails"
@@ -62,7 +62,20 @@ def _fetch_store_data(app_id: int) -> dict[str, Any]:
             "metacritic": None,
             "metacritic_score": None,
             "release_year": None,
+            "requires_3rd_party_account": False,
+            "3rd_party_account_details": None,
         }
+
+        # 3rd-party account check
+        drm_notice = game_data.get("drm_notice", "")
+        if "Requires 3rd-Party Account" in drm_notice or "Requires account from" in drm_notice:
+            result["requires_3rd_party_account"] = True
+            result["3rd_party_account_details"] = drm_notice
+
+        ext_notice = game_data.get("ext_user_account_notice", "")
+        if ext_notice:
+            result["requires_3rd_party_account"] = True
+            result["3rd_party_account_details"] = ext_notice
 
         # Price parsing
         if game_data.get("is_free"):
@@ -85,8 +98,6 @@ def _fetch_store_data(app_id: int) -> dict[str, Any]:
         date_str = release_date.get("date")
         if date_str:
             try:
-                # Expecting format like "Apr 19, 2011" or "2011"
-                # Some dates are just "2023" or "TBA"
                 if len(date_str) >= 4:
                     result["release_year"] = int(date_str.split(",")[-1].strip()[:4])
             except (ValueError, IndexError):
@@ -98,7 +109,7 @@ def _fetch_store_data(app_id: int) -> dict[str, Any]:
         return {"error": f"Store API Error: {str(e)}"}
 
 
-def _fetch_steam_deck_status(app_id: int) -> dict[str, Any] | None:
+def fetch_steam_deck_status(app_id: int) -> dict[str, Any] | None:
     """Fetch Steam Deck verification status."""
     try:
         report = SteamDeckClient().get_status(app_id)
@@ -111,7 +122,7 @@ def _fetch_steam_deck_status(app_id: int) -> dict[str, Any] | None:
         return None
 
 
-def _fetch_protondb_rating(app_id: int) -> dict[str, Any] | None:
+def fetch_protondb_rating(app_id: int) -> dict[str, Any] | None:
     """Fetch ProtonDB rating."""
     try:
         report = ProtonDBClient().get_rating(app_id)
@@ -125,7 +136,7 @@ def _fetch_protondb_rating(app_id: int) -> dict[str, Any] | None:
         return None
 
 
-def _fetch_steam_reviews(app_id: int) -> dict[str, Any] | None:
+def fetch_steam_reviews(app_id: int) -> dict[str, Any] | None:
     """Fetch Steam user reviews summary."""
     try:
         url = f"https://store.steampowered.com/appreviews/{app_id}"
@@ -153,7 +164,7 @@ def _fetch_steam_reviews(app_id: int) -> dict[str, Any] | None:
         return None
 
 
-def _check_recommendation(
+def check_recommendation(
     game_data: dict[str, Any],
     config_path: str | None,
     block_list_path: str | None,
@@ -220,10 +231,23 @@ def _check_recommendation(
                     is_recommended = False
                     reasons.append(f"ProtonDB {tier} < {prefs.min_protondb_rating}")
 
+            # Steam Deck Check
+            deck = game_data.get("steam_deck")
+            if deck:
+                status = deck.get("status")
+                if status and not prefs.meets_steam_deck_level(status):
+                    is_recommended = False
+                    reasons.append(f"Steam Deck {status} < {prefs.min_steam_deck_level}")
+
+            # 3rd Party Account Check
+            if game_data.get("requires_3rd_party_account"):
+                is_recommended = False
+                reasons.append(f"Requires 3rd-party account: {game_data.get('3rd_party_account_details')}")
+
         except Exception as e:
             logger.error(f"Config check failed: {e}")
 
-    result = {"recommended": is_recommended}
+    result: dict[str, Any] = {"recommended": is_recommended}
     if not is_recommended:
         result["reasons"] = reasons
     return result
@@ -243,7 +267,7 @@ def check_game(
         return
 
     # 1. Store Data
-    store_info = _fetch_store_data(app_id_int)
+    store_info = fetch_store_data(app_id_int)
     if "error" in store_info:
         print(json.dumps(store_info, indent=2))
         return
@@ -253,10 +277,11 @@ def check_game(
         "name": store_info.get("name"),
         "release_year": store_info.get("release_year"),
         "price": store_info.get("price_str"),
-        "steam_deck": _fetch_steam_deck_status(app_id_int),
-        "protondb": _fetch_protondb_rating(app_id_int),
+        "steam_deck": fetch_steam_deck_status(app_id_int),
+        "protondb": fetch_protondb_rating(app_id_int),
         "metacritic": store_info.get("metacritic"),
-        "steam_reviews": _fetch_steam_reviews(app_id_int),
+        "steam_reviews": fetch_steam_reviews(app_id_int),
+        "requires_3rd_party_account": store_info.get("requires_3rd_party_account"),
         # Internal fields for validation, removed before printing
         "_price_val": store_info.get("price_val"),
         "_metacritic_score": store_info.get("metacritic_score"),
@@ -264,7 +289,7 @@ def check_game(
 
     # 2. Recommendation Logic
     owned_games = _load_owned_games(inventory_path) if inventory_path else None
-    recommendation = _check_recommendation(
+    recommendation = check_recommendation(
         output, config_path, block_list_path, owned_games
     )
     if recommendation:

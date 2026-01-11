@@ -1,4 +1,4 @@
-.PHONY: install lint format type-check check clean clean-all login balance help
+.PHONY: install lint format type-check check clean clean-all login balance inventory auto-buy help
 
 VENV := venv
 PYTHON := $(VENV)/bin/python3
@@ -12,6 +12,8 @@ help:
 	@echo "  make install      Create venv and install dependencies"
 	@echo "  make login        Run headless login flow"
 	@echo "  make balance      Check Steam Wallet balance"
+	@echo "  make inventory    Generate owned games list (private/authenticated)"
+	@echo "  make auto-buy     Autonomous mode: Check balance -> Recommend -> Buy"
 	@echo "  make lint         Run ruff linter"
 	@echo "  make format       Format code with ruff"
 	@echo "  make check        Run lint and type checks"
@@ -70,6 +72,16 @@ login: venv
 balance: venv
 	$(PYTHON) main.py --balance
 
+inventory: venv
+	$(PYTHON) main.py --inventory-private
+
+auto-buy: inventory
+	$(PYTHON) main.py --auto-buy --config config.yaml --block-list block_list.yaml --inventory inventory_private.csv --headful
+
+# Run manual purchase test with visible browser (Usage: make test-buy APPID=12345)
+test-buy: venv
+	$(PYTHON) main.py --buy $(APPID) --headful
+
 # Schedule weekly run (macOS launchd)
 schedule: venv
 	@mkdir -p logs
@@ -92,5 +104,5 @@ schedule-status:
 	@echo "=== Recent Log ==="
 	@tail -20 logs/weekly.log 2>/dev/null || echo "No logs yet"
 
-recommend:
-	gemini "Search the web for the best Steam Deck Verified games released since 2010 and randomly pick one single game to recommend. Return ONLY the numeric Steam App ID." | grep -oE '[0-9]+' | head -n1 | xargs venv/bin/python main.py --check-game
+recommend: inventory
+	PYTHONPATH=. venv/bin/python src/recommend_metacritic.py --config config.yaml --inventory inventory_private.csv | head -n1 | xargs venv/bin/python main.py --config config.yaml --block-list block_list.yaml --inventory inventory_private.csv --check-game

@@ -1,15 +1,17 @@
 import os
+import re
 from playwright.sync_api import sync_playwright
 from src.steam_auth import login, STATE_FILE, USER_AGENT
 
 
-def check_balance():
+def get_balance() -> float | None:
+    """Check Steam Wallet balance and return as float."""
     if not os.path.exists(STATE_FILE):
         print(f"[INFO] Session file '{STATE_FILE}' not found. Attempting login...")
         login()
         if not os.path.exists(STATE_FILE):
             print("[ERROR] Login failed. Cannot check balance.")
-            return
+            return None
 
     print("Launching browser...")
     with sync_playwright() as p:
@@ -30,16 +32,28 @@ def check_balance():
                 balance_text = elem.inner_text()
                 break
 
+        browser.close()
+
         if balance_text:
-            print(f"\n[SUCCESS] Steam Wallet Balance: {balance_text.strip()}")
+            # Clean string "$12.34" -> 12.34
+            clean_text = re.sub(r"[^\d.]", "", balance_text)
+            try:
+                return float(clean_text)
+            except ValueError:
+                print(f"[ERROR] Could not parse balance: {balance_text}")
+                return None
         else:
             print("\n[WARNING] Could not find wallet balance.")
-            if page.query_selector(".login_btn") or page.query_selector("text=Sign In"):
-                print("Detected 'Sign In' button - Session likely expired.")
+            return None
 
-            page.screenshot(path="balance_error.png")
 
-        browser.close()
+def check_balance():
+    """CLI wrapper for get_balance."""
+    balance = get_balance()
+    if balance is not None:
+        print(f"\n[SUCCESS] Steam Wallet Balance: ${balance:.2f}")
+    else:
+        print("Failed to retrieve balance.")
 
 
 if __name__ == "__main__":

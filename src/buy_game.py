@@ -22,24 +22,78 @@ class SteamCheckout:
 
     def find_purchase_button(self):
         """Find the final purchase/confirm button."""
-        # Selectors from archive/src/store/checkout.py
         selectors = [
+            "#purchase_button_bottom", # Confirmed selector
             "#purchase_button",
             ".purchase_button",
             "#purchase_confirm_btn",
             'button[class*="purchase"]',
             'button[class*="Primary"]',
-            # Additional known IDs
             "#submit_payment_button",
             "#purchase_button_bottom_text",
         ]
 
         for s in selectors:
-            if self.page.is_visible(s):
-                return self.page.locator(s)
+            try:
+                # Use .first to avoid strict mode violations if multiple exist
+                loc = self.page.locator(s).filter(visible=True).first
+                if loc.count() > 0:
+                    return loc
+            except Exception:
+                continue
 
         # Fallback text search
-        return self.page.get_by_text("Purchase").last
+        for text in ["Purchase", "Authenticate Payment"]:
+            loc = self.page.get_by_text(text).filter(visible=True).last
+            if loc.count() > 0:
+                return loc
+        
+        return None
+
+    def clear_cart(self):
+        """Remove all items currently in the cart using Steam API or DOM fallback."""
+        logger.info("Navigating to Cart to ensure it's clear...")
+        self.page.goto("https://store.steampowered.com/cart/", wait_until="networkidle")
+        time.sleep(1)
+
+        # 1. Attempt API clear if token is available
+        try:
+            token = self.page.evaluate("""() => {
+                try {
+                    // Try to find token in SSR data
+                    for (let i=0; i < window.SSR.loaderData.length; i++) {
+                        const data = JSON.parse(window.SSR.loaderData[i]);
+                        if (data.strWebAPIToken) return data.strWebAPIToken;
+                    }
+                } catch (e) {}
+                return null;
+            }""")
+            
+            if token:
+                logger.info("Found WebAPIToken, clearing cart via API...")
+                self.page.evaluate("""(t) => {
+                    fetch('https://api.steampowered.com/IAccountCartService/DeleteCart/v1?access_token=' + t, {
+                        method: 'POST',
+                        body: new FormData()
+                    });
+                }""", token)
+                time.sleep(1)
+                self.page.reload()
+                time.sleep(1)
+        except Exception as e:
+            logger.debug(f"API cart clear failed: {e}")
+
+        # 2. DOM Fallback (Remove items one by one)
+        while True:
+            remove_btns = self.page.get_by_role("button", name="Remove").or_(self.page.get_by_text("Remove")).filter(visible=True)
+            if remove_btns.count() > 0:
+                logger.info(f"Removing item from cart via DOM (Items: {remove_btns.count()})...")
+                remove_btns.first.click()
+                time.sleep(1)
+            else:
+                break
+        
+        logger.info("Cart is clear.")
 
     def checkout_with_wallet(self):
         """Complete checkout flow."""
@@ -47,78 +101,88 @@ class SteamCheckout:
         self.page.goto("https://store.steampowered.com/cart/", wait_until="networkidle")
         time.sleep(2)
 
-        # 1. Click "Continue to Payment"
-        # Try finding the button
-        continue_btn = None
-
-        # Priority: Text match (New UI)
-        text_match = self.page.get_by_text("Continue to payment")
-        if text_match.count() > 0 and text_match.first.is_visible():
-            continue_btn = text_match.first
-        else:
-            # Fallback selectors from archive
-            selectors = [
-                "#btn_purchase_self",
-                ".btn_checkout",
-                "button.Primary",
-                "a.Primary",
-            ]
-            for s in selectors:
-                if self.page.is_visible(s):
-                    continue_btn = self.page.locator(s)
+        # 1. Select recipient choice to ensure cart is ready for checkout
+        recipient_selectors = [
+            "button:has-text('For my account')",
+            "button:has-text('Purchase for myself')",
+            "#btn_purchase_self"
+        ]
+        
+        for s in recipient_selectors:
+            try:
+                loc = self.page.locator(s).filter(visible=True).first
+                if loc.count() > 0:
+                    logger.info(f"Selecting recipient using: {s}")
+                    loc.click()
+                    time.sleep(1)
                     break
+            except Exception:
+                continue
 
-        if not continue_btn:
-            logger.error("Could not find 'Continue to Payment' button.")
-            self.page.screenshot(path="cart_failed.png")
-            return False
-
-        logger.info("Clicking 'Continue to Payment'...")
-        continue_btn.click()
-
-        # Wait for Checkout Page
-        logger.info("Waiting for checkout page...")
-        try:
-            self.page.wait_for_url("**/checkout/**", timeout=15000)
-        except Exception as e:
-            logger.warning(
-                f"URL did not change to /checkout/?state={self.page.url}. Error: {e}"
-            )
-
-        self.page.wait_for_load_state("networkidle")
+        # 2. Directly navigate to the checkout page as a more robust method than clicking
+        logger.info("Navigating directly to checkout URL...")
+        self.page.goto("https://checkout.steampowered.com/checkout/?accountcart=1", wait_until="networkidle")
         time.sleep(2)
 
-        # 2. Review Page
-        # Handle Terms of Service (SSA)
-        ssa_checkbox = self.page.locator("#accept_ssa")
-        if ssa_checkbox.is_visible():
-            if not ssa_checkbox.is_checked():
-                logger.info("Accepting SSA...")
-                ssa_checkbox.click()
-                time.sleep(0.5)
+        # 3. Final Review Page
+        # SSA (Steam Subscriber Agreement) check - Prioritize #accept_ssa
+        ssa_selectors = ["#accept_ssa", "[name='accept_ssa']"]
+        for s in ssa_selectors:
+            try:
+                ssa_loc = self.page.locator(s).filter(visible=True).first
+                if ssa_loc.count() > 0:
+                    # Check if it's a checkbox input
+                    is_checkbox = self.page.evaluate("el => el.tagName === 'INPUT' && el.type === 'checkbox'", ssa_loc.element_handle())
+                    
+                    if is_checkbox:
+                        if not ssa_loc.is_checked():
+                            logger.info(f"Checking SSA checkbox ({s})...")
+                            ssa_loc.check()
+                    else:
+                        # Just click it if it's a styled element (like a div or span acting as a checkbox)
+                        logger.info(f"Clicking SSA agreement element ({s})...")
+                        ssa_loc.click()
+                    
+                    time.sleep(0.5)
+                    break
+            except Exception as e:
+                logger.debug(f"SSA selector {s} failed: {e}")
+                continue
 
         # Find Final Button
         final_btn = self.find_purchase_button()
 
         if final_btn and final_btn.is_visible():
-            logger.info("Final Purchase button found.")
-
-            # --- SAFETY CHECK ---
-            logger.warning(
-                "[SAFETY] Stopping before final click. Uncomment in 'buy_game.py' to enable."
-            )
-            # final_btn.click()
-            # --------------------
-
-            self.page.screenshot(path="checkout_ready.png")
-            return True
+            logger.info("Final Purchase button found. Clicking...")
+            final_btn.click()
+            
+            # 4. Verify Success
+            logger.info("Waiting for purchase confirmation...")
+            try:
+                # Wait for "Thank you" page or receipt link
+                # 1. Check URL change
+                # 2. Check for receipt elements
+                self.page.wait_for_selector("#receipt_link, .checkout_receipt_area, text='Thank you'", timeout=30000)
+                logger.info("[SUCCESS] Purchase confirmed by Steam UI.")
+                self.page.screenshot(path="purchase_success.png")
+                return True
+            except Exception as e:
+                # Check for error messages
+                error_msg = self.page.locator("#error_display, .error_display").filter(visible=True).first
+                if error_msg.count() > 0:
+                    logger.error(f"[FAILURE] Purchase failed: {error_msg.inner_text()}")
+                else:
+                    logger.error(f"[FAILURE] Verification timed out or failed: {e}")
+                
+                self.page.screenshot(path="purchase_failed.png")
+                return False
         else:
             logger.error("Could not find final Purchase button.")
             self.page.screenshot(path="checkout_failed.png")
             return False
 
 
-def buy_game(app_id):
+def buy_game(app_id, headless=True):
     if not os.path.exists(STATE_FILE):
         logger.info("Session not found. Attempting login...")
         login()
@@ -129,13 +193,16 @@ def buy_game(app_id):
     logger.info(f"Launching browser to buy AppID: {app_id}...")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=headless)
         context = browser.new_context(storage_state=STATE_FILE, user_agent=USER_AGENT)
         page = context.new_page()
 
         checkout = SteamCheckout(page)
 
         try:
+            # 0. Clear Cart first
+            checkout.clear_cart()
+
             # 1. Add to Cart
             logger.info(f"Adding AppID {app_id} to cart...")
             page.goto(f"https://store.steampowered.com/app/{app_id}")
@@ -146,27 +213,59 @@ def buy_game(app_id):
                 logger.info("Passing age gate...")
                 page.select_option("#ageYear", "1990")
                 page.click(".btnv6_blue_hoverfade")
-                page.wait_for_load_state("networkidle")
+                try:
+                    page.wait_for_load_state("networkidle")
+                    time.sleep(2)
+                except Exception:
+                    logger.warning("Timeout waiting for age gate redirect")
 
             if page.query_selector(".already_in_library"):
                 logger.info("Game already owned.")
                 return
 
-            # Add to cart selector from archive
-            add_btn = page.query_selector(".btn_addtocart a")
+            # Find Add to Cart button
+            logger.info("Looking for 'Add to Cart' button...")
+            add_btn = None
+            cart_selectors = [
+                ".btn_addtocart a",
+                "a:has-text('Add to Cart')",
+                "#btn_add_to_cart",
+                "[data-tooltip-text='Add to Cart']"
+            ]
+
+            for selector in cart_selectors:
+                try:
+                    if page.is_visible(selector):
+                        add_btn = page.locator(selector).first
+                        logger.info(f"Found Add to Cart with selector: {selector}")
+                        break
+                except Exception:
+                    continue
+            
+            if not add_btn:
+                try:
+                    add_btn = page.wait_for_selector(".btn_addtocart a", timeout=3000)
+                except Exception:
+                    pass
+
             if add_btn:
                 add_btn.click()
             else:
                 logger.error("Add to cart button not found.")
-                return
+                page.screenshot(path="add_to_cart_failed.png")
+                return False
 
             # 2. Checkout
-            checkout.checkout_with_wallet()
+            return checkout.checkout_with_wallet()
 
         except Exception as e:
             logger.error(f"Error: {e}")
             page.screenshot(path="error.png")
+            return False
         finally:
+            # If headful, wait a bit so user can see
+            if not headless:
+                time.sleep(5)
             browser.close()
 
 
