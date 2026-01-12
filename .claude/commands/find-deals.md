@@ -8,16 +8,21 @@ allowed-tools: Bash, Read, WebSearch, WebFetch
 Search for discounted Steam games and generate a detailed markdown report with reviews, scores, and recommendations. This skill is read-only and will NOT purchase any games.
 
 ## Arguments
-- `$ARGUMENTS` - Format: `[COUNT] [--skip-inventory]`
+- `$ARGUMENTS` - Format: `[COUNT] [-o PATH] [--skip-inventory]`
   - **COUNT**: Number of games to include (default: 10)
+  - **-o PATH** or **--output PATH**: Output path for the report
+    - No path: Print markdown to stdout (default)
+    - Directory (e.g., `reports/`): Generate timestamped file in that directory
+    - File path (e.g., `reports/deals.md`): Write to exact file
   - **--skip-inventory**: Include owned games in report (for public reports)
 
 ## Usage Examples
 ```
-/find-deals                      # 10 games, excludes owned games
-/find-deals 5                    # 5 games, excludes owned games
-/find-deals --skip-inventory     # 10 games, includes all games (public report)
-/find-deals 20 --skip-inventory  # 20 games, includes all games (public report)
+/find-deals                         # 10 games, prints markdown to stdout
+/find-deals 5                       # 5 games, prints to stdout
+/find-deals -o reports/             # 10 games, saves to reports/deals_TIMESTAMP.md
+/find-deals -o my-deals.md          # 10 games, saves to my-deals.md
+/find-deals 20 -o docs/ --skip-inventory  # 20 games, timestamped file, includes all
 ```
 
 ## Workflow
@@ -39,25 +44,28 @@ Display a summary of the current criteria:
 ### Step 2: Parse Arguments
 Parse `$ARGUMENTS` to extract:
 - **COUNT**: First numeric value, or 10 if not provided
+- **-o PATH** or **--output PATH**: Output path (value following -o or --output flag)
 - **--skip-inventory**: Check if this flag is present
 
 Tell the user:
 - How many games you're searching for
+- Where the output will go (stdout, directory with timestamp, or specific file)
 - Whether inventory check is enabled or skipped
 
 ### Step 3: Run Deals Finder
 Execute the deals finder command:
 
 ```bash
-cd /Users/mydev/code/steam-bot && venv/bin/python main.py --find-deals <COUNT> --config config.yaml --block-list block_list.yaml [--skip-inventory]
+cd /Users/mydev/code/steam-bot && venv/bin/python main.py --find-deals <COUNT> --config config.yaml --block-list block_list.yaml [--deals-output <PATH>] [--skip-inventory]
 ```
 
-Add `--skip-inventory` flag only if it was specified in the arguments.
-
-The report will be automatically saved to `docs/deals_YYYYMMDD_HHMMSS.md`.
+- Add `--deals-output <PATH>` if `-o` or `--output` was specified in the arguments
+- Add `--skip-inventory` flag only if it was specified in the arguments
+- If no output path specified, markdown is printed to stdout
 
 ### Step 4: Display Report
-Read the generated report using the file path shown in the CLI output and display the full markdown content to the user.
+- If output was to stdout: The markdown is already displayed
+- If output was to a file: Read the generated report using the file path shown in the CLI output and display the full markdown content to the user
 
 ## Data Sources
 - **Steam Store API** - Official Steam sales and specials
@@ -89,5 +97,7 @@ Additional automatic filters:
 
 ## Important Notes
 - This skill is read-only and does NOT purchase games
-- Report files are saved with unique timestamps to docs/ directory
+- Default output is to stdout (no file created)
+- Use `-o <directory>/` to save with timestamped filename
+- Use `-o <filepath>` to save to a specific file
 - Use `--skip-inventory` when generating reports for public sharing

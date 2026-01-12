@@ -1,5 +1,7 @@
 import argparse
 import logging
+import os
+import sys
 import time
 from pathlib import Path
 
@@ -188,9 +190,16 @@ def find_deals(
     """
     logger.info(f"Finding {count} best deals...")
 
-    # Generate output path if not specified
-    if not output_path:
-        output_path = generate_timestamped_filename("docs")
+    # Determine output behavior:
+    # - No path: print to stdout
+    # - Directory: generate timestamped filename in that directory
+    # - Full path: use as-is
+    final_path: str | None = None
+    if output_path:
+        if os.path.isdir(output_path) or output_path.endswith("/"):
+            final_path = generate_timestamped_filename(output_path.rstrip("/"))
+        else:
+            final_path = output_path
 
     # Load config for preferences
     try:
@@ -238,18 +247,24 @@ def find_deals(
         min_quotes=3,
     )
 
-    generator.generate_report(enriched_deals, report_config, output_path)
-
-    # Output
-    print(f"\n[SUCCESS] Deals report saved to: {output_path}")
-    print(f"\nFound {len(enriched_deals)} deals matching your criteria:\n")
-
-    for i, deal in enumerate(enriched_deals, 1):
+    if final_path:
+        # Write to file
+        generator.generate_report(enriched_deals, report_config, final_path)
+        print(f"\n[SUCCESS] Deals report saved to: {final_path}", file=sys.stderr)
         print(
-            f"  {i}. {deal.name} - ${deal.sale_price:.2f} (-{deal.discount_percent}%)"
+            f"\nFound {len(enriched_deals)} deals matching your criteria:\n",
+            file=sys.stderr,
         )
-
-    print(f"\nFull report: {output_path}")
+        for i, deal in enumerate(enriched_deals, 1):
+            print(
+                f"  {i}. {deal.name} - ${deal.sale_price:.2f} (-{deal.discount_percent}%)",
+                file=sys.stderr,
+            )
+        print(f"\nFull report: {final_path}", file=sys.stderr)
+    else:
+        # Print markdown to stdout
+        markdown = generator.generate_report(enriched_deals, report_config)
+        print(markdown)
 
 
 def main():

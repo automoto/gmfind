@@ -21,6 +21,29 @@ from .steam_specials import SteamDeal
 logger = logging.getLogger(__name__)
 
 
+def _normalize_metacritic_url(url: str | None) -> str | None:
+    """Ensure Metacritic URL links to PC version with critic-reviews.
+
+    Args:
+        url: Raw Metacritic URL.
+
+    Returns:
+        URL with /critic-reviews/ and ?platform=pc appended.
+    """
+    if not url:
+        return url
+    # Remove trailing slash for consistent handling
+    url = url.rstrip("/")
+    # Add /critic-reviews if not present
+    if "/critic-reviews" not in url:
+        url = f"{url}/critic-reviews/"
+    # Add platform=pc parameter
+    if "platform=pc" not in url:
+        separator = "&" if "?" in url else "?"
+        url = f"{url}{separator}platform=pc"
+    return url
+
+
 @dataclass
 class AggregatedDeal:
     """Unified deal representation with all metadata."""
@@ -190,7 +213,9 @@ class DealsAggregator:
 
                     if store_data.get("metacritic"):
                         deal.metacritic_score = store_data["metacritic"].get("score")
-                        deal.metacritic_url = store_data["metacritic"].get("url")
+                        deal.metacritic_url = _normalize_metacritic_url(
+                            store_data["metacritic"].get("url")
+                        )
 
                 if deal.app_type != "game":
                     logger.debug(f"Skipping non-game: {deal.name} ({deal.app_type})")
@@ -313,7 +338,7 @@ class DealsAggregator:
                 if not deal.metacritic_score:
                     deal.metacritic_score = game.metascore
                 if not deal.metacritic_url:
-                    deal.metacritic_url = game.url
+                    deal.metacritic_url = _normalize_metacritic_url(game.url)
 
             for review in reviews:
                 deal.metacritic_quotes.append(
