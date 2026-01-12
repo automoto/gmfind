@@ -13,12 +13,16 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 
-ProtonDBRating = Literal["platinum", "gold", "silver", "bronze", "borked"]
-PROTONDB_RATING_ORDER = ["platinum", "gold", "silver", "bronze", "borked"]
+# Single source of truth for ProtonDB ratings (order matters: best to worst)
+_PROTONDB_RATING_VALUES = ("platinum", "gold", "silver", "bronze", "borked", "unknown")
+ProtonDBRating = Literal[*_PROTONDB_RATING_VALUES]
+PROTONDB_RATING_ORDER = list(_PROTONDB_RATING_VALUES)
 
-SteamDeckLevel = Literal["verified", "playable", "unsupported", "unknown"]
+# Single source of truth for Steam Deck levels (order matters: best to worst)
 # Priority order: Verified is best, Unknown is worst
-STEAM_DECK_LEVEL_ORDER = ["verified", "playable", "unsupported", "unknown"]
+_STEAM_DECK_LEVEL_VALUES = ("verified", "playable", "unsupported", "unknown")
+SteamDeckLevel = Literal[*_STEAM_DECK_LEVEL_VALUES]
+STEAM_DECK_LEVEL_ORDER = list(_STEAM_DECK_LEVEL_VALUES)
 
 
 class SteamConfig(BaseModel):
@@ -34,6 +38,7 @@ class PreferencesConfig(BaseModel):
 
     max_price: float = Field(default=20.0, gt=0)
     min_metacritic_score: int = Field(default=75, ge=0, le=100)
+    require_metacritic_score: bool = Field(default=False)
     min_protondb_rating: ProtonDBRating = Field(default="gold")
     max_game_age_years: int = Field(default=20, ge=1, le=50)
     min_steam_deck_level: SteamDeckLevel = Field(default="playable")
@@ -125,12 +130,19 @@ def load_config(config_path: str | Path = "config.yaml") -> Config:
         "min_metacritic_score": get_pref(
             "STEAM_MIN_METACRITIC_SCORE", "min_metacritic_score", 75, int
         ),
+        "require_metacritic_score": get_pref(
+            "STEAM_REQUIRE_METACRITIC", "require_metacritic_score", False,
+            lambda x: x.lower() in ("true", "1", "yes") if isinstance(x, str) else bool(x)
+        ),
         "min_protondb_rating": get_pref(
             "STEAM_MIN_PROTONDB_RATING", "min_protondb_rating", "gold", str
         ).lower(),
         "max_game_age_years": get_pref(
             "STEAM_MAX_GAME_AGE_YEARS", "max_game_age_years", 20, int
         ),
+        "min_steam_deck_level": get_pref(
+            "STEAM_MIN_DECK_LEVEL", "min_steam_deck_level", "playable", str
+        ).lower(),
     }
 
     # Build configuration

@@ -23,7 +23,7 @@ class SteamCheckout:
     def find_purchase_button(self):
         """Find the final purchase/confirm button."""
         selectors = [
-            "#purchase_button_bottom", # Confirmed selector
+            "#purchase_button_bottom",  # Confirmed selector
             "#purchase_button",
             ".purchase_button",
             "#purchase_confirm_btn",
@@ -47,7 +47,7 @@ class SteamCheckout:
             loc = self.page.get_by_text(text).filter(visible=True).last
             if loc.count() > 0:
                 return loc
-        
+
         return None
 
     def clear_cart(self):
@@ -68,15 +68,18 @@ class SteamCheckout:
                 } catch (e) {}
                 return null;
             }""")
-            
+
             if token:
                 logger.info("Found WebAPIToken, clearing cart via API...")
-                self.page.evaluate("""(t) => {
+                self.page.evaluate(
+                    """(t) => {
                     fetch('https://api.steampowered.com/IAccountCartService/DeleteCart/v1?access_token=' + t, {
                         method: 'POST',
                         body: new FormData()
                     });
-                }""", token)
+                }""",
+                    token,
+                )
                 time.sleep(1)
                 self.page.reload()
                 time.sleep(1)
@@ -85,14 +88,20 @@ class SteamCheckout:
 
         # 2. DOM Fallback (Remove items one by one)
         while True:
-            remove_btns = self.page.get_by_role("button", name="Remove").or_(self.page.get_by_text("Remove")).filter(visible=True)
+            remove_btns = (
+                self.page.get_by_role("button", name="Remove")
+                .or_(self.page.get_by_text("Remove"))
+                .filter(visible=True)
+            )
             if remove_btns.count() > 0:
-                logger.info(f"Removing item from cart via DOM (Items: {remove_btns.count()})...")
+                logger.info(
+                    f"Removing item from cart via DOM (Items: {remove_btns.count()})..."
+                )
                 remove_btns.first.click()
                 time.sleep(1)
             else:
                 break
-        
+
         logger.info("Cart is clear.")
 
     def checkout_with_wallet(self):
@@ -105,9 +114,9 @@ class SteamCheckout:
         recipient_selectors = [
             "button:has-text('For my account')",
             "button:has-text('Purchase for myself')",
-            "#btn_purchase_self"
+            "#btn_purchase_self",
         ]
-        
+
         for s in recipient_selectors:
             try:
                 loc = self.page.locator(s).filter(visible=True).first
@@ -121,7 +130,10 @@ class SteamCheckout:
 
         # 2. Directly navigate to the checkout page as a more robust method than clicking
         logger.info("Navigating directly to checkout URL...")
-        self.page.goto("https://checkout.steampowered.com/checkout/?accountcart=1", wait_until="networkidle")
+        self.page.goto(
+            "https://checkout.steampowered.com/checkout/?accountcart=1",
+            wait_until="networkidle",
+        )
         time.sleep(2)
 
         # 3. Final Review Page
@@ -132,8 +144,11 @@ class SteamCheckout:
                 ssa_loc = self.page.locator(s).filter(visible=True).first
                 if ssa_loc.count() > 0:
                     # Check if it's a checkbox input
-                    is_checkbox = self.page.evaluate("el => el.tagName === 'INPUT' && el.type === 'checkbox'", ssa_loc.element_handle())
-                    
+                    is_checkbox = self.page.evaluate(
+                        "el => el.tagName === 'INPUT' && el.type === 'checkbox'",
+                        ssa_loc.element_handle(),
+                    )
+
                     if is_checkbox:
                         if not ssa_loc.is_checked():
                             logger.info(f"Checking SSA checkbox ({s})...")
@@ -142,7 +157,7 @@ class SteamCheckout:
                         # Just click it if it's a styled element (like a div or span acting as a checkbox)
                         logger.info(f"Clicking SSA agreement element ({s})...")
                         ssa_loc.click()
-                    
+
                     time.sleep(0.5)
                     break
             except Exception as e:
@@ -155,27 +170,31 @@ class SteamCheckout:
         if final_btn and final_btn.is_visible():
             logger.info("Final Purchase button found. Clicking...")
             final_btn.click()
-            
+
             # 4. Verify Success
             logger.info("Waiting for purchase confirmation...")
             try:
                 # Use a combined locator but take .first to avoid strict mode violations
                 # matching multiple "Thank you" elements.
-                success_indicator = self.page.locator("#receipt_link").or_(
-                    self.page.locator(".checkout_receipt_area")
-                ).or_(
-                    self.page.get_by_text("Thank you")
-                ).first
-                
+                success_indicator = (
+                    self.page.locator("#receipt_link")
+                    .or_(self.page.locator(".checkout_receipt_area"))
+                    .or_(self.page.get_by_text("Thank you"))
+                    .first
+                )
+
                 success_indicator.wait_for(state="visible", timeout=30000)
                 logger.info("[SUCCESS] Purchase confirmed by Steam UI.")
                 return True
             except Exception as e:
                 # Check if we're actually on the receipt page even if wait_for failed
-                if "thankyou" in self.page.url.lower() or "receipt" in self.page.url.lower():
+                if (
+                    "thankyou" in self.page.url.lower()
+                    or "receipt" in self.page.url.lower()
+                ):
                     logger.info("[SUCCESS] Purchase confirmed by URL.")
                     return True
-                    
+
                 logger.error(f"[FAILURE] Verification timed out or failed: {e}")
                 self.page.screenshot(path="purchase_failed.png")
                 return False
@@ -233,7 +252,7 @@ def buy_game(app_id, headless=True):
                 ".btn_addtocart a",
                 "a:has-text('Add to Cart')",
                 "#btn_add_to_cart",
-                "[data-tooltip-text='Add to Cart']"
+                "[data-tooltip-text='Add to Cart']",
             ]
 
             for selector in cart_selectors:
@@ -244,7 +263,7 @@ def buy_game(app_id, headless=True):
                         break
                 except Exception:
                     continue
-            
+
             if not add_btn:
                 try:
                     add_btn = page.wait_for_selector(".btn_addtocart a", timeout=3000)

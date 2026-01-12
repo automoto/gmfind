@@ -29,7 +29,7 @@ from pathlib import Path
 from contextlib import contextmanager
 from typing import Optional, Generator, Tuple
 
-from playwright.sync_api import sync_playwright, Page, BrowserContext, Playwright
+from playwright.sync_api import sync_playwright, Page, BrowserContext
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -37,8 +37,7 @@ load_dotenv()
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -239,7 +238,7 @@ class SteamAuth:
         error_selectors = [
             '[class*="FormError"]',
             '[class*="error"]',
-            '.newlogindialog_FormError',
+            ".newlogindialog_FormError",
         ]
 
         for selector in error_selectors:
@@ -411,7 +410,7 @@ class SteamAuth:
                     return False
 
                 logger.info("Entering 2FA code...")
-                self._enter_2fa_code(page, code, self._username)
+                self._enter_2fa_code(page, code, self._username or "")
                 time.sleep(2)
 
                 # Reset timeout after code entry
