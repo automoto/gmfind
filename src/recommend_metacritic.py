@@ -18,7 +18,7 @@ from src.game_check import (
     fetch_store_data,
     fetch_steam_deck_status,
     fetch_protondb_rating,
-    check_recommendation
+    check_recommendation,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,13 +30,13 @@ def get_owned_app_ids(inventory_path: str) -> set[int]:
     path = Path(inventory_path)
     if not path.exists():
         return owned
-    
-    with open(path, 'r', encoding='utf-8') as f:
+
+    with open(path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row.get('steam_id'):
+            if row.get("steam_id"):
                 try:
-                    owned.add(int(row['steam_id']))
+                    owned.add(int(row["steam_id"]))
                 except (ValueError, KeyError):
                     continue
     return owned
@@ -44,9 +44,10 @@ def get_owned_app_ids(inventory_path: str) -> set[int]:
 
 def search_steam_for_app_id(game_name: str) -> int | None:
     """Search Steam for a game and return the first matching App ID."""
+
     # Simple normalization for comparison
     def normalize(s):
-        return re.sub(r'[^a-z0-9]', '', s.lower())
+        return re.sub(r"[^a-z0-9]", "", s.lower())
 
     requested_norm = normalize(game_name)
     if not requested_norm:
@@ -56,67 +57,79 @@ def search_steam_for_app_id(game_name: str) -> int | None:
         url = f"https://store.steampowered.com/search/?term={quote(game_name)}&category1=998"
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        results = soup.select('.search_result_row')
-        
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        results = soup.select(".search_result_row")
+
         for result in results:
-            title_elem = result.select_one('.title')
+            title_elem = result.select_one(".title")
             if not title_elem:
                 continue
-            
+
             result_name = title_elem.get_text(strip=True)
             result_norm = normalize(result_name)
-            
+
             # Ensure we don't match on empty strings
             if not result_norm:
                 continue
 
             # Priority 1: Exact match (normalized)
             # Priority 2: One is a subset of the other (fallback)
-            if requested_norm == result_norm or requested_norm in result_norm or result_norm in requested_norm:
-                href = str(result.get('href', ''))
-                match = re.search(r'/app/(\d+)', href)
+            if (
+                requested_norm == result_norm
+                or requested_norm in result_norm
+                or result_norm in requested_norm
+            ):
+                href = str(result.get("href", ""))
+                match = re.search(r"/app/(\d+)", href)
                 if match:
                     app_id = int(match.group(1))
-                    logger.info(f"  - Search match: '{result_name}' for query '{game_name}' (AppID: {app_id})")
+                    logger.info(
+                        f"  - Search match: '{result_name}' for query '{game_name}' (AppID: {app_id})"
+                    )
                     return app_id
-                
+
     except Exception as e:
         logger.warning(f"Failed to search Steam for '{game_name}': {e}")
-    
+
     return None
 
 
-def get_recommendation_with_paths(config_path: str, inventory_path: str, block_list_path: str) -> int | None:
+def get_recommendation_with_paths(
+    config_path: str, inventory_path: str, block_list_path: str
+) -> int | None:
     """Find a random recommended game meeting all criteria using file paths."""
     config = load_config(config_path)
     owned_ids = get_owned_app_ids(inventory_path)
-    
+
     current_year = datetime.datetime.now().year
     min_year = current_year - config.preferences.max_game_age_years
     min_score = config.preferences.min_metacritic_score
-    
-    logger.info(f"Fetching top PC games from Metacritic (Score >= {min_score}, Year >= {min_year})...")
-    
+
+    logger.info(
+        f"Fetching top PC games from Metacritic (Score >= {min_score}, Year >= {min_year})..."
+    )
+
     scraper = MetacriticScraper()
-    games = scraper.fetch_top_rated_games(min_score=min_score, min_year=min_year, limit=100)
-    
+    games = scraper.fetch_top_rated_games(
+        min_score=min_score, min_year=min_year, limit=100
+    )
+
     if not games:
         logger.error("No games found meeting criteria.")
         return None
-        
+
     random.shuffle(games)
-    
+
     logger.info(f"Found {len(games)} candidates. Checking against all criteria...")
-    
+
     for game in games:
         logger.info(f"Checking candidate: {game.name}")
-        
+
         app_id = search_steam_for_app_id(game.name)
         if not app_id:
             continue
-            
+
         store_info = fetch_store_data(app_id)
         if "error" in store_info:
             continue
@@ -135,27 +148,29 @@ def get_recommendation_with_paths(config_path: str, inventory_path: str, block_l
         }
 
         rec = check_recommendation(game_data, config_path, block_list_path, owned_ids)
-        
+
         if rec and rec.get("recommended"):
-            logger.info(f"  - Found valid recommendation: {game.name} (AppID: {app_id})")
+            logger.info(
+                f"  - Found valid recommendation: {game.name} (AppID: {app_id})"
+            )
             return app_id
         else:
             reasons = ", ".join(rec.get("reasons", [])) if rec else "Unknown"
             logger.info(f"  - Rejected: {reasons}")
-        
+
         time.sleep(0.5)
-    
+
     return None
 
 
 def main():
     """CLI entry point for the recommendation script."""
     logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s"
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
     )
-    
+
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--inventory", default="inventory_private.csv")
@@ -163,12 +178,13 @@ def main():
     args = parser.parse_args()
 
     app_id = get_recommendation_with_paths(args.config, args.inventory, args.block_list)
-    
+
     if app_id:
         print(app_id)
     else:
         logger.error("Could not find any suitable games from the candidates.")
         import sys
+
         sys.exit(1)
 
 

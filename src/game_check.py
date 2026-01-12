@@ -11,6 +11,7 @@ import requests
 
 from src.blocklist_checker import load_block_list
 from src.config import load_config
+from src.recommendations.metacritic import MetacriticScraper
 from src.recommendations.protondb import ProtonDBClient
 from src.recommendations.steam_deck import SteamDeckClient
 
@@ -39,7 +40,7 @@ def _load_owned_games(csv_path: str) -> set[int]:
                         continue
     except Exception as e:
         logger.error(f"Failed to load inventory: {e}")
-    
+
     return owned_ids
 
 
@@ -58,6 +59,7 @@ def fetch_store_data(app_id: int) -> dict[str, Any]:
         result = {
             "name": game_data.get("name"),
             "type": game_data.get("type", "unknown"),
+            "short_description": game_data.get("short_description", ""),
             "price_str": "Not Available",
             "price_val": None,
             "metacritic": None,
@@ -69,7 +71,10 @@ def fetch_store_data(app_id: int) -> dict[str, Any]:
 
         # 3rd-party account check
         drm_notice = game_data.get("drm_notice", "")
-        if "Requires 3rd-Party Account" in drm_notice or "Requires account from" in drm_notice:
+        if (
+            "Requires 3rd-Party Account" in drm_notice
+            or "Requires account from" in drm_notice
+        ):
             result["requires_3rd_party_account"] = True
             result["3rd_party_account_details"] = drm_notice
 
@@ -214,11 +219,16 @@ def check_recommendation(
 
             # Metacritic Check
             meta_score = game_data.get("_metacritic_score")
-            if meta_score is not None and meta_score < prefs.min_metacritic_score:
+            if meta_score is not None:
+                if meta_score < prefs.min_metacritic_score:
+                    is_recommended = False
+                    reasons.append(
+                        f"Metacritic {meta_score} < {prefs.min_metacritic_score}"
+                    )
+            elif prefs.require_metacritic_score:
+                # No score available and score is required
                 is_recommended = False
-                reasons.append(
-                    f"Metacritic {meta_score} < {prefs.min_metacritic_score}"
-                )
+                reasons.append("No Metacritic score available (required by config)")
 
             # Age Check
             release_year = game_data.get("release_year")
@@ -243,12 +253,16 @@ def check_recommendation(
                 status = deck.get("status")
                 if status and not prefs.meets_steam_deck_level(status):
                     is_recommended = False
-                    reasons.append(f"Steam Deck {status} < {prefs.min_steam_deck_level}")
+                    reasons.append(
+                        f"Steam Deck {status} < {prefs.min_steam_deck_level}"
+                    )
 
             # 3rd Party Account Check
             if game_data.get("requires_3rd_party_account"):
                 is_recommended = False
-                reasons.append(f"Requires 3rd-party account: {game_data.get('3rd_party_account_details')}")
+                reasons.append(
+                    f"Requires 3rd-party account: {game_data.get('3rd_party_account_details')}"
+                )
 
         except Exception as e:
             logger.error(f"Config check failed: {e}")

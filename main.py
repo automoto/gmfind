@@ -13,6 +13,9 @@ from src.inventory import SteamInventory
 from src.inventory_private import fetch_and_export
 from src.config import load_config
 from src.recommend_metacritic import get_recommendation_with_paths
+from src.deals import SteamSpecialsFetcher, DealsAggregator
+from src.reports import MarkdownReportGenerator
+from src.reports.markdown_generator import ReportConfig, generate_timestamped_filename
 
 # Configure logging
 logging.basicConfig(
@@ -45,13 +48,13 @@ def check_steam_deck(app_id: str):
         client = SteamDeckClient()
         logger.info(f"Checking Steam Deck status for AppID {app_id}...")
         report = client.get_status(app_id_int)
-        
-        print("\n" + "="*40)
+
+        print("\n" + "=" * 40)
         print(f"STEAM DECK VERIFICATION (AppID: {app_id})")
-        print("="*40)
+        print("=" * 40)
         print(f"Status:  {report.display_status}")
-        print("="*40 + "\n")
-        
+        print("=" * 40 + "\n")
+
     except ValueError:
         logger.error("App ID must be an integer.")
     except Exception as e:
@@ -65,26 +68,31 @@ def check_protondb(app_id: str):
         client = ProtonDBClient()
         logger.info(f"Checking ProtonDB rating for AppID {app_id}...")
         report = client.get_rating(app_id_int)
-        
-        print("\n" + "="*40)
+
+        print("\n" + "=" * 40)
         print(f"PROTONDB REPORT (AppID: {app_id})")
-        print("="*40)
+        print("=" * 40)
         print(f"Tier:       {report.tier.upper()}")
         print(f"Confidence: {report.confidence}")
         print(f"Trend:      {report.trend}")
         print(f"Score:      {report.score}")
-        print("="*40 + "\n")
-        
+        print("=" * 40 + "\n")
+
     except ValueError:
         logger.error("App ID must be an integer.")
     except Exception as e:
         logger.error(f"Failed to check ProtonDB: {e}")
 
 
-def run_auto_buy(config_path="config.yaml", inventory_path="inventory_private.csv", block_list_path="block_list.yaml", headless=True):
+def run_auto_buy(
+    config_path="config.yaml",
+    inventory_path="inventory_private.csv",
+    block_list_path="block_list.yaml",
+    headless=True,
+):
     """Run the fully autonomous buy loop."""
     logger.info("Starting Auto-Buy sequence...")
-    
+
     # 1. Load Config
     try:
         config = load_config(config_path)
@@ -100,17 +108,19 @@ def run_auto_buy(config_path="config.yaml", inventory_path="inventory_private.cs
     if balance is None:
         logger.error("Could not retrieve wallet balance. Aborting.")
         return
-    
+
     logger.info(f"Current Wallet Balance: ${balance:.2f}")
-    
+
     if balance < max_price:
-        logger.warning(f"Insufficient funds for max price item (${balance:.2f} < ${max_price:.2f}). Aborting.")
+        logger.warning(
+            f"Insufficient funds for max price item (${balance:.2f} < ${max_price:.2f}). Aborting."
+        )
         return
 
     # 3. Get Recommendation
     logger.info("Searching for recommendation...")
     app_id = get_recommendation_with_paths(config_path, inventory_path, block_list_path)
-    
+
     if not app_id:
         logger.info("No suitable recommendation found.")
         return
@@ -126,34 +136,125 @@ def run_auto_buy(config_path="config.yaml", inventory_path="inventory_private.cs
         logger.error(f"Purchase failed with exception: {e}")
 
     if success:
-        logger.info(f"[VERIFICATION] Purchase of App ID {app_id} reported successful. Refreshing inventory...")
+        logger.info(
+            f"[VERIFICATION] Purchase of App ID {app_id} reported successful. Refreshing inventory..."
+        )
         # Wait a few seconds for Steam backend to update
         time.sleep(5)
         try:
             # Refresh private inventory
             # fetch_and_export already creates its own authenticated context
             fetch_and_export(inventory_path)
-            
+
             # Verify app_id is now in owned_games
             from src.recommend_metacritic import get_owned_app_ids
+
             owned_ids = get_owned_app_ids(inventory_path)
-            
+
             if int(app_id) in owned_ids:
-                logger.info(f"[VERIFICATION SUCCESS] App ID {app_id} found in updated inventory!")
+                logger.info(
+                    f"[VERIFICATION SUCCESS] App ID {app_id} found in updated inventory!"
+                )
                 print(f"\n[COMPLETE SUCCESS] Purchased and verified: App ID {app_id}")
             else:
-                logger.warning(f"[VERIFICATION UNCERTAIN] Purchase reported success, but App ID {app_id} not found in inventory yet. Steam might be slow to update.")
+                logger.warning(
+                    f"[VERIFICATION UNCERTAIN] Purchase reported success, but App ID {app_id} not found in inventory yet. Steam might be slow to update."
+                )
         except Exception as e:
             logger.error(f"[VERIFICATION ERROR] Failed to refresh inventory: {e}")
     else:
-        logger.error(f"[FAILURE] Purchase of App ID {app_id} failed or could not be confirmed.")
+        logger.error(
+            f"[FAILURE] Purchase of App ID {app_id} failed or could not be confirmed."
+        )
+
+
+def find_deals(
+    count: int = 10,
+    output_path: str | None = None,
+    config_path: str = "config.yaml",
+    block_list_path: str = "block_list.yaml",
+    inventory_path: str = "inventory_private.csv",
+    skip_inventory: bool = False,
+):
+    """Find discounted games and generate a markdown report.
+
+    Args:
+        count: Number of games to include in the report.
+        output_path: Path to save the report (default: docs/deals_TIMESTAMP.md).
+        config_path: Path to config.yaml.
+        block_list_path: Path to block_list.yaml.
+        inventory_path: Path to inventory CSV.
+        skip_inventory: If True, include owned games (for public reports).
+    """
+    logger.info(f"Finding {count} best deals...")
+
+    # Generate output path if not specified
+    if not output_path:
+        output_path = generate_timestamped_filename("docs")
+
+    # Load config for preferences
+    try:
+        config = load_config(config_path)
+        preferences = {
+            "max_price": config.preferences.max_price,
+            "min_metacritic_score": config.preferences.min_metacritic_score,
+            "max_game_age_years": config.preferences.max_game_age_years,
+        }
+        logger.info(f"Loaded preferences: {preferences}")
+    except Exception as e:
+        logger.warning(f"Failed to load config: {e}")
+        preferences = {}
+
+    # Fetch deals from Steam
+    logger.info("Fetching deals from Steam...")
+    steam_fetcher = SteamSpecialsFetcher()
+    steam_deals = steam_fetcher.fetch_deals(limit=count * 5)
+    logger.info(f"Found {len(steam_deals)} Steam deals")
+
+    # Filter and enrich
+    logger.info("Filtering and enriching deals...")
+    aggregator = DealsAggregator(
+        config_path, block_list_path, inventory_path, skip_inventory
+    )
+    enriched_deals = aggregator.get_filtered_enriched_deals(
+        steam_deals,
+        limit=count,
+        review_limit=3,
+    )
+
+    if not enriched_deals:
+        logger.warning("No deals found matching your criteria.")
+        print("\n[WARNING] No deals found matching your criteria.")
+        print(
+            "Try adjusting your config.yaml settings (max_price, min_metacritic_score, etc.)"
+        )
+        return
+
+    # Generate report
+    logger.info(f"Generating report with {len(enriched_deals)} deals...")
+    generator = MarkdownReportGenerator(preferences)
+    report_config = ReportConfig(
+        game_count=count,
+        min_quotes=3,
+    )
+
+    generator.generate_report(enriched_deals, report_config, output_path)
+
+    # Output
+    print(f"\n[SUCCESS] Deals report saved to: {output_path}")
+    print(f"\nFound {len(enriched_deals)} deals matching your criteria:\n")
+
+    for i, deal in enumerate(enriched_deals, 1):
+        print(
+            f"  {i}. {deal.name} - ${deal.sale_price:.2f} (-{deal.discount_percent}%)"
+        )
+
+    print(f"\nFull report: {output_path}")
 
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Steam Auto-Buyer CLI"
-    )
+    parser = argparse.ArgumentParser(description="Steam Auto-Buyer CLI")
     parser.add_argument(
         "--buy",
         type=str,
@@ -235,9 +336,30 @@ def main():
         help="Path to inventory CSV",
     )
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Enable verbose debug logging",
+    )
+    parser.add_argument(
+        "--find-deals",
+        type=int,
+        nargs="?",
+        const=10,
+        metavar="COUNT",
+        help="Find discounted games and generate markdown report (default: 10 games)",
+    )
+    parser.add_argument(
+        "--deals-output",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Output path for deals report (default: docs/deals_TIMESTAMP.md)",
+    )
+    parser.add_argument(
+        "--skip-inventory",
+        action="store_true",
+        help="Skip inventory check - include owned games in report (for public reports)",
     )
 
     args = parser.parse_args()
@@ -278,6 +400,15 @@ def main():
             print(f"\n[SUCCESS] Private inventory exported to {path}")
         except Exception as e:
             logger.error(f"Failed to export private inventory: {e}")
+    elif args.find_deals is not None:
+        find_deals(
+            count=args.find_deals,
+            output_path=args.deals_output,
+            config_path=args.config,
+            block_list_path=args.block_list,
+            inventory_path=args.inventory,
+            skip_inventory=args.skip_inventory,
+        )
     else:
         parser.print_help()
 

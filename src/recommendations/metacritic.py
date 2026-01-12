@@ -1,5 +1,6 @@
 """Metacritic scraper for game ratings and recommendations."""
 
+import json
 import logging
 import re
 import time
@@ -22,6 +23,16 @@ class MetacriticGame:
     platform: str
     release_date: str | None
     url: str
+
+
+@dataclass
+class MetacriticReviewQuote:
+    """A critic review quote from Metacritic."""
+
+    outlet: str
+    score: int | None
+    quote: str
+    url: str | None
 
 
 class MetacriticScraper:
@@ -60,12 +71,13 @@ class MetacriticScraper:
         # Optimization: If min_year is provided, fetch by specific years
         if min_year:
             import datetime
+
             current_year = datetime.datetime.now().year
             return self.fetch_games_by_year_range(
                 start_year=min_year,
                 end_year=current_year,
                 min_score=min_score,
-                limit=limit
+                limit=limit,
             )
 
         if self._cache:
@@ -79,23 +91,24 @@ class MetacriticScraper:
     ) -> list[MetacriticGame]:
         """Fetch top games by iterating through a randomized list of years."""
         all_games: list[MetacriticGame] = []
-        
+
         # Create a list of years and randomize them for more diverse recommendations
         years = list(range(start_year, end_year + 1))
         import random
+
         random.shuffle(years)
-        
+
         for year in years:
             if len(all_games) >= limit:
                 break
-                
+
             logger.info(f"Scraping Metacritic for year: {year}...")
             year_url = f"{self.BASE_URL}/browse/game/pc/all/{year}/metascore/"
-            
+
             # Fetch first page for each year
             year_games = self._fetch_paginated_list(year_url, min_score, limit=50)
             all_games.extend(year_games)
-            
+
             # Rate limiting between years
             if len(all_games) < limit:
                 time.sleep(0.5)
@@ -104,7 +117,9 @@ class MetacriticScraper:
         random.shuffle(all_games)
         return all_games[:limit]
 
-    def _fetch_paginated_list(self, base_url: str, min_score: int, limit: int) -> list[MetacriticGame]:
+    def _fetch_paginated_list(
+        self, base_url: str, min_score: int, limit: int
+    ) -> list[MetacriticGame]:
         """Internal helper to fetch games from a paginated Metacritic list."""
         games: list[MetacriticGame] = []
         page = 1
@@ -114,7 +129,7 @@ class MetacriticScraper:
                 # Append page param correctly
                 separator = "&" if "?" in base_url else "?"
                 url = f"{base_url}{separator}page={page}"
-                
+
                 response = requests.get(
                     url, headers=self.HEADERS, timeout=30.0, allow_redirects=True
                 )
@@ -137,7 +152,7 @@ class MetacriticScraper:
                 # Stop if scores on this page drop below minimum
                 if page_games and page_games[-1].metascore < min_score:
                     break
-                
+
                 if not found_new:
                     break
 
@@ -147,7 +162,7 @@ class MetacriticScraper:
             except requests.RequestException as e:
                 logger.warning(f"Failed to fetch Metacritic page {page}: {e}")
                 break
-        
+
         return games[:limit]
 
     def _parse_browse_page(self, html: str) -> list[MetacriticGame]:
@@ -270,16 +285,421 @@ class MetacriticScraper:
 
             soup = BeautifulSoup(response.text, "html.parser")
 
-            # Find first PC game result
+            # Collect all game results that could be on PC
+            candidates: list[MetacriticGame] = []
             results = soup.select(".c-pageSiteSearch-results .g-grid-container")
+
             for result in results:
-                platform_elem = result.select_one(".c-tagList")
-                if platform_elem and "PC" in platform_elem.get_text():
-                    game = self._parse_game_card(result)
-                    if game:
-                        return game
+                platform_elem = result.select_one('[data-testid="product-platform"]')
+                platform_text = platform_elem.get_text() if platform_elem else ""
+
+                # Accept games with PC or multi-platform ("and more")
+                if "PC" not in platform_text and "and more" not in platform_text:
+                    continue
+
+                game = self._parse_search_result(result)
+                if game:
+                    candidates.append(game)
+
+            # Find best match by title similarity
+            if candidates:
+                return self._find_best_title_match(name, candidates)
 
         except requests.RequestException as e:
             logger.warning(f"Metacritic search failed for '{name}': {e}")
 
         return None
+
+    def _find_best_title_match(
+        self, search_name: str, games: list[MetacriticGame]
+    ) -> MetacriticGame | None:
+        """Find the best matching game by title similarity.
+
+        Args:
+            search_name: The name being searched for.
+            games: List of candidate games.
+
+        Returns:
+            Best matching game or first game if no good match found.
+        """
+        if not games:
+            return None
+
+        # Normalize search name for comparison
+        search_normalized = self._normalize_title(search_name)
+
+        best_match = None
+        best_score = 0
+
+        for game in games:
+            game_normalized = self._normalize_title(game.name)
+
+            # Calculate similarity score
+            score = self._title_similarity(search_normalized, game_normalized)
+
+            # Bonus for exact match
+            if search_normalized == game_normalized:
+                return game
+
+            # Bonus for containing the search term
+            if search_normalized in game_normalized or game_normalized in search_normalized:
+                score += 0.3
+
+            if score > best_score:
+                best_score = score
+                best_match = game
+
+        # Return best match if similarity is reasonable, otherwise first result
+        return best_match if best_score > 0.4 else games[0]
+
+    def _normalize_title(self, title: str) -> str:
+        """Normalize a title for comparison."""
+        # Lowercase, remove special chars, normalize spaces
+        normalized = title.lower()
+        # Replace common variations
+        normalized = normalized.replace(":", "").replace("-", " ").replace("  ", " ")
+        # Convert roman numerals to arabic for consistency
+        roman_map = {
+            " ii ": " 2 ", " iii ": " 3 ", " iv ": " 4 ", " v ": " 5 ",
+            " vi ": " 6 ", " vii ": " 7 ", " viii ": " 8 ", " ix ": " 9 ", " x ": " 10 ",
+        }
+        # Add spaces for end-of-string matching
+        normalized = f" {normalized} "
+        for roman, arabic in roman_map.items():
+            normalized = normalized.replace(roman, arabic)
+        normalized = normalized.strip()
+        # Remove edition suffixes for better matching
+        for suffix in [" edition", " remaster", " definitive", " complete", " goty"]:
+            if suffix in normalized:
+                normalized = normalized.split(suffix)[0]
+        return normalized.strip()
+
+    def _title_similarity(self, a: str, b: str) -> float:
+        """Calculate simple word overlap similarity between two titles."""
+        words_a = set(a.split())
+        words_b = set(b.split())
+
+        if not words_a or not words_b:
+            return 0.0
+
+        intersection = words_a & words_b
+        union = words_a | words_b
+
+        return len(intersection) / len(union)
+
+    def _parse_search_result(self, result) -> MetacriticGame | None:
+        """Parse a search result element from Metacritic search page.
+
+        Args:
+            result: BeautifulSoup element for a search result.
+
+        Returns:
+            MetacriticGame object or None if parsing fails.
+        """
+        try:
+            # Get title
+            title_elem = result.select_one('[data-testid="product-title"]')
+            if not title_elem:
+                return None
+            name = title_elem.get_text(strip=True)
+
+            # Get URL and slug from the link
+            link_elem = result.select_one('a[href*="/game/"]')
+            if not link_elem:
+                return None
+
+            url = link_elem.get("href", "")
+            if not url.startswith("http"):
+                url = f"{self.BASE_URL}{url}"
+
+            # Extract slug from URL (e.g., /game/warhammer-40000-space-marine-ii/)
+            slug_match = re.search(r"/game/([^/]+)/?", url)
+            slug = slug_match.group(1) if slug_match else ""
+
+            if not slug:
+                return None
+
+            # Get metascore
+            score_elem = result.select_one(
+                ".c-siteReviewScore span, [data-testid='critic-score'], .c-siteReviewScore_background"
+            )
+            metascore = 0
+            if score_elem:
+                score_text = score_elem.get_text(strip=True)
+                try:
+                    metascore = int(score_text)
+                except ValueError:
+                    pass
+
+            # Get release date
+            date_elem = result.select_one('[data-testid="product-release-date"]')
+            release_date = date_elem.get_text(strip=True) if date_elem else None
+
+            return MetacriticGame(
+                name=name,
+                slug=slug,
+                metascore=metascore,
+                user_score=None,
+                platform="PC",
+                release_date=release_date,
+                url=url,
+            )
+
+        except (TypeError, ValueError, AttributeError) as e:
+            logger.debug(f"Failed to parse search result: {e}")
+            return None
+
+    def get_critic_reviews(
+        self, game_slug: str, limit: int = 5
+    ) -> list[MetacriticReviewQuote]:
+        """Fetch critic review quotes for a game.
+
+        Args:
+            game_slug: The game's URL slug (e.g., "elden-ring").
+            limit: Maximum number of reviews to return.
+
+        Returns:
+            List of MetacriticReviewQuote objects.
+        """
+        reviews = []
+        reviews_url = f"{self.BASE_URL}/game/{game_slug}/critic-reviews/"
+
+        try:
+            response = requests.get(
+                reviews_url, headers=self.HEADERS, timeout=15.0, allow_redirects=True
+            )
+            response.raise_for_status()
+
+            soup = BeautifulSoup(response.text, "html.parser")
+            reviews = self._parse_critic_reviews(soup, limit)
+
+        except requests.RequestException as e:
+            logger.warning(f"Failed to fetch Metacritic reviews for '{game_slug}': {e}")
+
+        return reviews
+
+    def _parse_critic_reviews(
+        self, soup: BeautifulSoup, limit: int
+    ) -> list[MetacriticReviewQuote]:
+        """Parse critic reviews from a Metacritic reviews page.
+
+        Metacritic uses Nuxt.js with client-side rendering, so reviews are
+        embedded in the window.__NUXT__ JavaScript object rather than HTML.
+
+        Args:
+            soup: BeautifulSoup object of the reviews page.
+            limit: Maximum number of reviews to return.
+
+        Returns:
+            List of MetacriticReviewQuote objects.
+        """
+        reviews: list[MetacriticReviewQuote] = []
+
+        # Extract reviews from embedded Nuxt.js data
+        nuxt_reviews = self._extract_nuxt_reviews(soup)
+        if nuxt_reviews:
+            for review_data in nuxt_reviews[:limit]:
+                review = self._parse_nuxt_review(review_data)
+                if review and review.quote:
+                    reviews.append(review)
+            return reviews
+
+        # Fallback: Try legacy CSS selectors for older page versions
+        review_cards = soup.select(
+            ".c-siteReview, .review_content, [data-testid='critic-review']"
+        )
+
+        for card in review_cards:
+            if len(reviews) >= limit:
+                break
+
+            review = self._parse_review_card(card)
+            if review and review.quote:
+                reviews.append(review)
+
+        return reviews
+
+    def _extract_nuxt_reviews(self, soup: BeautifulSoup) -> list[dict] | None:
+        """Extract review data from embedded Nuxt.js state.
+
+        Metacritic embeds review data in window.__NUXT__ using JavaScript
+        object notation (not valid JSON), so we use regex to extract reviews.
+
+        Args:
+            soup: BeautifulSoup object of the page.
+
+        Returns:
+            List of review dictionaries or None if not found.
+        """
+        # Find script tags containing __NUXT__
+        for script in soup.find_all("script"):
+            script_text = script.string or ""
+            if "window.__NUXT__" not in script_text:
+                continue
+
+            # Extract reviews directly using regex (more reliable than JSON parsing)
+            reviews = self._extract_reviews_via_regex(script_text)
+            if reviews:
+                return reviews
+
+        return None
+
+    def _extract_reviews_via_regex(self, script_text: str) -> list[dict] | None:
+        """Extract review data using regex patterns.
+
+        The Nuxt data uses JavaScript object syntax like:
+        publicationName:"Gamereactor UK",score:100,quote:"...",url:"..."
+
+        Args:
+            script_text: The raw script content containing __NUXT__ data.
+
+        Returns:
+            List of review dictionaries or None.
+        """
+        reviews = []
+
+        # Pattern to find review blocks with publication, score, and quote
+        # Look for patterns like: publicationName:"Name",publicationSlug:"slug",...,score:100,...,quote:"..."
+        # We'll extract each field individually and pair them by position
+
+        # Find all publication names
+        pub_pattern = r'publicationName:"([^"]+)"'
+        publications = re.findall(pub_pattern, script_text)
+
+        # Find all scores (numeric values after "score:")
+        score_pattern = r'(?<![a-zA-Z])score:(\d+)'
+        scores = re.findall(score_pattern, script_text)
+
+        # Find all quotes
+        quote_pattern = r'quote:"([^"]+)"'
+        quotes = re.findall(quote_pattern, script_text)
+
+        # Find all URLs (external review URLs)
+        url_pattern = r'url:"(https?://[^"]+)"'
+        urls = re.findall(url_pattern, script_text)
+
+        # Match them up - they should appear in order in the data
+        # Take the minimum length to avoid misalignment
+        count = min(len(publications), len(scores), len(quotes))
+
+        if count == 0:
+            logger.debug(
+                f"Regex extraction found: {len(publications)} pubs, "
+                f"{len(scores)} scores, {len(quotes)} quotes"
+            )
+            return None
+
+        for i in range(count):
+            try:
+                review = {
+                    "publicationName": publications[i],
+                    "score": int(scores[i]),
+                    "quote": quotes[i],
+                    "url": urls[i] if i < len(urls) else None,
+                }
+                reviews.append(review)
+            except (IndexError, ValueError) as e:
+                logger.debug(f"Failed to construct review {i}: {e}")
+                continue
+
+        return reviews if reviews else None
+
+    def _parse_nuxt_review(self, review_data: dict) -> MetacriticReviewQuote | None:
+        """Parse a review from Nuxt data structure.
+
+        Args:
+            review_data: Dictionary containing review information.
+
+        Returns:
+            MetacriticReviewQuote or None.
+        """
+        try:
+            outlet = review_data.get("publicationName") or review_data.get("publication", {}).get("name", "Unknown")
+            score = review_data.get("score")
+            quote = review_data.get("quote", "")
+            url = review_data.get("url") or review_data.get("externalUrl")
+
+            if not quote:
+                return None
+
+            return MetacriticReviewQuote(
+                outlet=outlet,
+                score=int(score) if score is not None else None,
+                quote=quote,
+                url=url,
+            )
+        except (TypeError, ValueError, AttributeError) as e:
+            logger.debug(f"Failed to parse Nuxt review: {e}")
+            return None
+
+    def _parse_review_card(self, card) -> MetacriticReviewQuote | None:
+        """Parse a single review card.
+
+        Args:
+            card: BeautifulSoup element for a review card.
+
+        Returns:
+            MetacriticReviewQuote or None if parsing fails.
+        """
+        try:
+            # Get outlet name
+            outlet_elem = card.select_one(
+                ".c-siteReview_publicationName, .source, [data-testid='publication-name']"
+            )
+            outlet = outlet_elem.get_text(strip=True) if outlet_elem else "Unknown"
+
+            # Get score
+            score = None
+            score_elem = card.select_one(
+                ".c-siteReviewScore span, .metascore_w, [data-testid='critic-score']"
+            )
+            if score_elem:
+                try:
+                    score = int(score_elem.get_text(strip=True))
+                except ValueError:
+                    pass
+
+            # Get review quote/snippet
+            quote_elem = card.select_one(
+                ".c-siteReview_quote, .review_body, [data-testid='review-quote']"
+            )
+            quote = quote_elem.get_text(strip=True) if quote_elem else ""
+
+            # Get review URL
+            url = None
+            link_elem = card.select_one("a[href*='http']")
+            if link_elem:
+                url = link_elem.get("href")
+
+            if not quote:
+                return None
+
+            return MetacriticReviewQuote(
+                outlet=outlet,
+                score=score,
+                quote=quote,
+                url=url,
+            )
+
+        except (TypeError, ValueError, AttributeError) as e:
+            logger.debug(f"Failed to parse Metacritic review card: {e}")
+            return None
+
+    def get_game_with_reviews(
+        self, name: str, review_limit: int = 5
+    ) -> tuple[MetacriticGame | None, list[MetacriticReviewQuote]]:
+        """Search for a game and fetch its critic reviews.
+
+        Args:
+            name: Game name to search for.
+            review_limit: Maximum number of reviews to return.
+
+        Returns:
+            Tuple of (MetacriticGame or None, list of reviews).
+        """
+        game = self.search_game(name)
+        if not game or not game.slug:
+            return game, []
+
+        reviews = self.get_critic_reviews(game.slug, review_limit)
+        return game, reviews

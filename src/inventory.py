@@ -54,7 +54,9 @@ class SteamInventory:
         if self._owned_games is not None:
             return self._owned_games
 
-        url = f"https://steamcommunity.com/profiles/{self.steam_id}/games/?tab=all&xml=1"
+        url = (
+            f"https://steamcommunity.com/profiles/{self.steam_id}/games/?tab=all&xml=1"
+        )
 
         try:
             response = requests.get(url, timeout=30.0, allow_redirects=True)
@@ -89,7 +91,11 @@ class SteamInventory:
         )
 
         for match in game_pattern.finditer(xml_content):
-            games.append(OwnedGame(int(match.group(1)), match.group(2), int(float(match.group(3)) * 60)))
+            games.append(
+                OwnedGame(
+                    int(match.group(1)), match.group(2), int(float(match.group(3)) * 60)
+                )
+            )
 
         matched_ids = {g.app_id for g in games}
         for match in game_pattern_no_hours.finditer(xml_content):
@@ -121,7 +127,9 @@ class SteamInventory:
     def analyze_preferences(self) -> dict[str, int]:
         self.fetch_owned_games()
         tag_counts: dict[str, int] = {}
-        sorted_games = sorted(self._owned_games or [], key=lambda g: g.playtime_minutes, reverse=True)[:20]
+        sorted_games = sorted(
+            self._owned_games or [], key=lambda g: g.playtime_minutes, reverse=True
+        )[:20]
         for game in sorted_games:
             for tag in self.get_game_tags(game.app_id):
                 tag_counts[tag] = tag_counts.get(tag, 0) + 1
@@ -129,8 +137,9 @@ class SteamInventory:
 
     def export_inventory_csv(self, filename: str = "inventory.csv") -> str:
         import csv
+
         games = self.fetch_owned_games()
-        with open(filename, mode='w', newline='', encoding='utf-8') as f:
+        with open(filename, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(["Title", "Steam ID"])
             for game in games:

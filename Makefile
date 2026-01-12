@@ -109,3 +109,9 @@ schedule-status:
 
 recommend: inventory
 	PYTHONPATH=. venv/bin/python src/recommend_metacritic.py --config config.yaml --inventory inventory_private.csv | head -n1 | xargs venv/bin/python main.py --config config.yaml --block-list block_list.yaml --inventory inventory_private.csv --check-game
+
+gen-deck-report:
+	venv/bin/python main.py --find-deals 10 --config config.yaml --skip-inventory
+
+gen-reg-report:
+	venv/bin/python main.py --find-deals 10 --config config-general.yaml --skip-inventory
