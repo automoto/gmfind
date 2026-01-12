@@ -57,6 +57,7 @@ def fetch_store_data(app_id: int) -> dict[str, Any]:
         game_data = data[str(app_id)]["data"]
         result = {
             "name": game_data.get("name"),
+            "type": game_data.get("type", "unknown"),
             "price_str": "Not Available",
             "price_val": None,
             "metacritic": None,
@@ -182,6 +183,11 @@ def check_recommendation(
         is_recommended = False
         reasons.append("Game is already owned")
 
+    # Check App Type (Exclude DLC, etc.)
+    if game_data.get("type") != "game":
+        is_recommended = False
+        reasons.append(f"App type is {game_data.get('type')}, not 'game'")
+
     # Check Blocklist
     if block_list_path and is_recommended:
         name = game_data.get("name")
@@ -275,6 +281,7 @@ def check_game(
     output = {
         "app_id": app_id_int,
         "name": store_info.get("name"),
+        "type": store_info.get("type"),
         "release_year": store_info.get("release_year"),
         "price": store_info.get("price_str"),
         "steam_deck": fetch_steam_deck_status(app_id_int),

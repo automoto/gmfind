@@ -17,6 +17,7 @@ ProtonDBRating = Literal["platinum", "gold", "silver", "bronze", "borked"]
 PROTONDB_RATING_ORDER = ["platinum", "gold", "silver", "bronze", "borked"]
 
 SteamDeckLevel = Literal["verified", "playable", "unsupported", "unknown"]
+# Priority order: Verified is best, Unknown is worst
 STEAM_DECK_LEVEL_ORDER = ["verified", "playable", "unsupported", "unknown"]
 
 

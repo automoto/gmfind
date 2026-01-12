@@ -12,7 +12,6 @@ from src.blocklist_checker import check_blocklist
 from src.inventory import SteamInventory
 from src.inventory_private import fetch_and_export
 from src.config import load_config
-from src.steam_auth import get_authenticated_context
 from src.recommend_metacritic import get_recommendation_with_paths
 
 # Configure logging
@@ -132,8 +131,8 @@ def run_auto_buy(config_path="config.yaml", inventory_path="inventory_private.cs
         time.sleep(5)
         try:
             # Refresh private inventory
-            with get_authenticated_context() as (context, page):
-                fetch_and_export(inventory_path)
+            # fetch_and_export already creates its own authenticated context
+            fetch_and_export(inventory_path)
             
             # Verify app_id is now in owned_games
             from src.recommend_metacritic import get_owned_app_ids

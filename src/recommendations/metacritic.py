@@ -57,18 +57,64 @@ class MetacriticScraper:
         Returns:
             List of MetacriticGame objects sorted by score.
         """
+        # Optimization: If min_year is provided, fetch by specific years
+        if min_year:
+            import datetime
+            current_year = datetime.datetime.now().year
+            return self.fetch_games_by_year_range(
+                start_year=min_year,
+                end_year=current_year,
+                min_score=min_score,
+                limit=limit
+            )
+
         if self._cache:
             filtered = [g for g in self._cache if g.metascore >= min_score]
-            if min_year:
-                filtered = [g for g in filtered if self._game_year(g) >= min_year]
             return filtered[:limit]
 
+        return self._fetch_paginated_list(self.BROWSE_URL, min_score, limit)
+
+    def fetch_games_by_year_range(
+        self, start_year: int, end_year: int, min_score: int = 75, limit: int = 200
+    ) -> list[MetacriticGame]:
+        """Fetch top games by iterating through a randomized list of years."""
+        all_games: list[MetacriticGame] = []
+        
+        # Create a list of years and randomize them for more diverse recommendations
+        years = list(range(start_year, end_year + 1))
+        import random
+        random.shuffle(years)
+        
+        for year in years:
+            if len(all_games) >= limit:
+                break
+                
+            logger.info(f"Scraping Metacritic for year: {year}...")
+            year_url = f"{self.BASE_URL}/browse/game/pc/all/{year}/metascore/"
+            
+            # Fetch first page for each year
+            year_games = self._fetch_paginated_list(year_url, min_score, limit=50)
+            all_games.extend(year_games)
+            
+            # Rate limiting between years
+            if len(all_games) < limit:
+                time.sleep(0.5)
+
+        # Shuffle combined results so the final selection isn't just the top of the first year scraped
+        random.shuffle(all_games)
+        return all_games[:limit]
+
+    def _fetch_paginated_list(self, base_url: str, min_score: int, limit: int) -> list[MetacriticGame]:
+        """Internal helper to fetch games from a paginated Metacritic list."""
         games: list[MetacriticGame] = []
         page = 1
 
         while len(games) < limit:
             try:
-                url = f"{self.BROWSE_URL}?page={page}"
+                # Append page param correctly
+                separator = "&" if "?" in base_url else "?"
+                url = f"{base_url}{separator}page={page}"
+                
                 response = requests.get(
                     url, headers=self.HEADERS, timeout=30.0, allow_redirects=True
                 )
@@ -77,53 +123,32 @@ class MetacriticScraper:
                     break
 
                 response.raise_for_status()
-
                 page_games = self._parse_browse_page(response.text)
 
                 if not page_games:
                     break
 
-                # Filter by minimum score and year
+                found_new = False
                 for game in page_games:
                     if game.metascore >= min_score:
-                        if min_year and self._game_year(game) < min_year:
-                            continue  # Skip old games
                         games.append(game)
+                        found_new = True
 
-                # Stop if scores drop below minimum
+                # Stop if scores on this page drop below minimum
                 if page_games and page_games[-1].metascore < min_score:
+                    break
+                
+                if not found_new:
                     break
 
                 page += 1
-                time.sleep(0.5)  # Rate limiting
+                time.sleep(0.3)
 
             except requests.RequestException as e:
                 logger.warning(f"Failed to fetch Metacritic page {page}: {e}")
                 break
-
-        self._cache = games[:limit]
-        logger.info(
-            f"Fetched {len(self._cache)} games from Metacritic (min_year={min_year})"
-        )
-        return self._cache
-
-    def _game_year(self, game: MetacriticGame) -> int:
-        """Extract release year from game's release_date string.
-
-        Args:
-            game: MetacriticGame object.
-
-        Returns:
-            Year as int, or 0 if unable to parse.
-        """
-        if not game.release_date:
-            return 0
-
-        # Try to extract 4-digit year from date string
-        match = re.search(r"\b(19|20)\d{2}\b", game.release_date)
-        if match:
-            return int(match.group())
-        return 0
+        
+        return games[:limit]
 
     def _parse_browse_page(self, html: str) -> list[MetacriticGame]:
         """Parse a Metacritic browse page for game entries.

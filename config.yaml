@@ -1,6 +1,6 @@
 preferences:
   # Maximum price in USD for a game purchase
-  max_price: 20.00
+  max_price: 60.00
 
   # Minimum Metacritic score (0-100)
   min_metacritic_score: 75
@@ -10,7 +10,7 @@ preferences:
   min_protondb_rating: "gold"
 
   # Maximum age of games to consider (in years)
-  max_game_age_years: 20
+  max_game_age_years: 2
 
   # Minimum steam deck compatbility level
   min_steam_deck_level: "playable"

@@ -159,21 +159,24 @@ class SteamCheckout:
             # 4. Verify Success
             logger.info("Waiting for purchase confirmation...")
             try:
-                # Wait for "Thank you" page or receipt link
-                # 1. Check URL change
-                # 2. Check for receipt elements
-                self.page.wait_for_selector("#receipt_link, .checkout_receipt_area, text='Thank you'", timeout=30000)
+                # Use a combined locator but take .first to avoid strict mode violations
+                # matching multiple "Thank you" elements.
+                success_indicator = self.page.locator("#receipt_link").or_(
+                    self.page.locator(".checkout_receipt_area")
+                ).or_(
+                    self.page.get_by_text("Thank you")
+                ).first
+                
+                success_indicator.wait_for(state="visible", timeout=30000)
                 logger.info("[SUCCESS] Purchase confirmed by Steam UI.")
-                self.page.screenshot(path="purchase_success.png")
                 return True
             except Exception as e:
-                # Check for error messages
-                error_msg = self.page.locator("#error_display, .error_display").filter(visible=True).first
-                if error_msg.count() > 0:
-                    logger.error(f"[FAILURE] Purchase failed: {error_msg.inner_text()}")
-                else:
-                    logger.error(f"[FAILURE] Verification timed out or failed: {e}")
-                
+                # Check if we're actually on the receipt page even if wait_for failed
+                if "thankyou" in self.page.url.lower() or "receipt" in self.page.url.lower():
+                    logger.info("[SUCCESS] Purchase confirmed by URL.")
+                    return True
+                    
+                logger.error(f"[FAILURE] Verification timed out or failed: {e}")
                 self.page.screenshot(path="purchase_failed.png")
                 return False
         else:

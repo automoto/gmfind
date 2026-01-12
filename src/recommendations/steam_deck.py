@@ -34,15 +34,15 @@ class SteamDeckClient:
             data = response.json()
 
             results = data.get("results", {})
-            resolved_category = results.get("resolved_category", 1)
+            resolved_category = results.get("resolved_category", 0)
 
-            # Map category ID to status
-            # 1: Unknown, 2: Unsupported, 3: Playable, 4: Verified
+            # Correct mapping based on Steam API observation:
+            # 0: Unknown, 1: Unsupported, 2: Playable, 3: Verified
             status_map: dict[int, SteamDeckStatus] = {
-                1: "unknown",
-                2: "unsupported",
-                3: "playable",
-                4: "verified",
+                0: "unknown",
+                1: "unsupported",
+                2: "playable",
+                3: "verified",
             }
 
             status = status_map.get(resolved_category, "unknown")

@@ -76,6 +76,9 @@ inventory: venv
 	$(PYTHON) main.py --inventory-private
 
 auto-buy: inventory
+	$(PYTHON) main.py --auto-buy --config config.yaml --block-list block_list.yaml --inventory inventory_private.csv
+
+auto-buy-visible: inventory
 	$(PYTHON) main.py --auto-buy --config config.yaml --block-list block_list.yaml --inventory inventory_private.csv --headful
 
 # Run manual purchase test with visible browser (Usage: make test-buy APPID=12345)

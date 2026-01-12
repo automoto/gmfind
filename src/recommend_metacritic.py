@@ -43,7 +43,15 @@ def get_owned_app_ids(inventory_path: str) -> set[int]:
 
 
 def search_steam_for_app_id(game_name: str) -> int | None:
-    """Search Steam for a game and return the first App ID."""
+    """Search Steam for a game and return the first matching App ID."""
+    # Simple normalization for comparison
+    def normalize(s):
+        return re.sub(r'[^a-z0-9]', '', s.lower())
+
+    requested_norm = normalize(game_name)
+    if not requested_norm:
+        return None
+
     try:
         url = f"https://store.steampowered.com/search/?term={quote(game_name)}&category1=998"
         response = requests.get(url, timeout=10)
@@ -53,10 +61,26 @@ def search_steam_for_app_id(game_name: str) -> int | None:
         results = soup.select('.search_result_row')
         
         for result in results:
-            href = str(result.get('href', ''))
-            match = re.search(r'/app/(\d+)', href)
-            if match:
-                return int(match.group(1))
+            title_elem = result.select_one('.title')
+            if not title_elem:
+                continue
+            
+            result_name = title_elem.get_text(strip=True)
+            result_norm = normalize(result_name)
+            
+            # Ensure we don't match on empty strings
+            if not result_norm:
+                continue
+
+            # Priority 1: Exact match (normalized)
+            # Priority 2: One is a subset of the other (fallback)
+            if requested_norm == result_norm or requested_norm in result_norm or result_norm in requested_norm:
+                href = str(result.get('href', ''))
+                match = re.search(r'/app/(\d+)', href)
+                if match:
+                    app_id = int(match.group(1))
+                    logger.info(f"  - Search match: '{result_name}' for query '{game_name}' (AppID: {app_id})")
+                    return app_id
                 
     except Exception as e:
         logger.warning(f"Failed to search Steam for '{game_name}': {e}")
@@ -100,6 +124,7 @@ def get_recommendation_with_paths(config_path: str, inventory_path: str, block_l
         game_data = {
             "app_id": app_id,
             "name": store_info.get("name"),
+            "type": store_info.get("type"),
             "release_year": store_info.get("release_year"),
             "steam_deck": fetch_steam_deck_status(app_id),
             "protondb": fetch_protondb_rating(app_id),
