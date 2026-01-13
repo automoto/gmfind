@@ -54,9 +54,7 @@ class SteamInventory:
         if self._owned_games is not None:
             return self._owned_games
 
-        url = (
-            f"https://steamcommunity.com/profiles/{self.steam_id}/games/?tab=all&xml=1"
-        )
+        url = f"https://steamcommunity.com/profiles/{self.steam_id}/games/?tab=all&xml=1"
 
         try:
             response = requests.get(url, timeout=30.0, allow_redirects=True)
@@ -92,9 +90,7 @@ class SteamInventory:
 
         for match in game_pattern.finditer(xml_content):
             games.append(
-                OwnedGame(
-                    int(match.group(1)), match.group(2), int(float(match.group(3)) * 60)
-                )
+                OwnedGame(int(match.group(1)), match.group(2), int(float(match.group(3)) * 60))
             )
 
         matched_ids = {g.app_id for g in games}

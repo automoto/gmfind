@@ -1,5 +1,5 @@
 #!/bin/bash
-# Weekly Steam bot runner script
+# Weekly gmfind auto-buy runner script
 # This script is called by launchd
 
 set -e
@@ -16,10 +16,10 @@ if [ -f .env ]; then
 fi
 
 # Log start time
-echo "=== Steam Bot Run: $(date) ===" >> logs/weekly.log
+echo "=== gmfind Run: $(date) ===" >> logs/weekly.log
 
-# Run the bot using the venv (headless since no display)
-./venv/bin/python3 main.py --headless >> logs/weekly.log 2>&1
+# Run auto-buy workflow using uv
+uv run gmfind buy --auto >> logs/weekly.log 2>&1
 EXIT_CODE=$?
 
 echo "=== Completed: $(date) (exit code: $EXIT_CODE) ===" >> logs/weekly.log

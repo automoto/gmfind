@@ -1,8 +1,14 @@
-# Environment and credentials
+# Environment and credentials - CRITICAL: Never commit
 .env
-*.env.local
+*.env
+*.env.*
+.env.local
+.env.*.local
+
+# Session/auth data - CRITICAL: Never commit
 steam_session.json
 steam_browser_auth.json
+*_auth.json
 
 # Python
 __pycache__/
@@ -25,6 +31,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
 # Virtual environments
 venv/
@@ -38,19 +45,37 @@ env/
 *.swp
 *.swo
 *~
-docs/
 
 # Playwright
 playwright-report/
 test-results/
 
-# Logs
+# Logs and data
 *.log
 logs/
 debug_*.png
 *.png
 *.csv
+inventory*.csv
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Type checking
+.mypy_cache/
+.ruff_cache/
+
+# uv
+uv.lock
+
+# Generated docs (but not README)
+docs/
+
+# Local plans/notes
+plans/

@@ -8,21 +8,19 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
+from gmfind.paths import get_config_file
 
 # Load environment variables from .env file
 load_dotenv()
 
 
-# Single source of truth for ProtonDB ratings (order matters: best to worst)
-_PROTONDB_RATING_VALUES = ("platinum", "gold", "silver", "bronze", "borked", "unknown")
-ProtonDBRating = Literal[*_PROTONDB_RATING_VALUES]
-PROTONDB_RATING_ORDER = list(_PROTONDB_RATING_VALUES)
+# ProtonDB ratings (order matters: best to worst)
+ProtonDBRating = Literal["platinum", "gold", "silver", "bronze", "borked", "unknown"]
+PROTONDB_RATING_ORDER = ["platinum", "gold", "silver", "bronze", "borked", "unknown"]
 
-# Single source of truth for Steam Deck levels (order matters: best to worst)
-# Priority order: Verified is best, Unknown is worst
-_STEAM_DECK_LEVEL_VALUES = ("verified", "playable", "unsupported", "unknown")
-SteamDeckLevel = Literal[*_STEAM_DECK_LEVEL_VALUES]
-STEAM_DECK_LEVEL_ORDER = list(_STEAM_DECK_LEVEL_VALUES)
+# Steam Deck levels (order matters: best to worst)
+SteamDeckLevel = Literal["verified", "playable", "unsupported", "unknown"]
+STEAM_DECK_LEVEL_ORDER = ["verified", "playable", "unsupported", "unknown"]
 
 
 class SteamConfig(BaseModel):
@@ -71,7 +69,7 @@ class Config(BaseModel):
     preferences: PreferencesConfig = Field(default_factory=PreferencesConfig)
 
 
-def load_config(config_path: str | Path = "config.yaml") -> Config:
+def load_config(config_path: str | Path | None = None) -> Config:
     """Load configuration from YAML file and environment variables.
 
     Environment variables take precedence over config file values for credentials.
@@ -87,7 +85,11 @@ def load_config(config_path: str | Path = "config.yaml") -> Config:
         ValueError: If required credentials are missing.
         pydantic.ValidationError: If configuration is invalid.
     """
-    config_path = Path(config_path)
+    # Use XDG default if no path specified
+    if config_path is None:
+        config_path = get_config_file()
+    else:
+        config_path = Path(config_path)
 
     # Use existing config.yaml if it exists, otherwise use defaults/env vars
     yaml_config: dict = {}
@@ -109,7 +111,7 @@ def load_config(config_path: str | Path = "config.yaml") -> Config:
 
     if not steam_id:
         raise ValueError(
-            "Steam ID is required. Set STEAM_ID environment variable or steam.steam_id in config.yaml"
+            "Steam ID is required. Set STEAM_ID env var or steam.steam_id in config.yaml"
         )
 
     # Get preferences from env vars with fallback to YAML config
@@ -131,15 +133,15 @@ def load_config(config_path: str | Path = "config.yaml") -> Config:
             "STEAM_MIN_METACRITIC_SCORE", "min_metacritic_score", 75, int
         ),
         "require_metacritic_score": get_pref(
-            "STEAM_REQUIRE_METACRITIC", "require_metacritic_score", False,
-            lambda x: x.lower() in ("true", "1", "yes") if isinstance(x, str) else bool(x)
+            "STEAM_REQUIRE_METACRITIC",
+            "require_metacritic_score",
+            False,
+            lambda x: x.lower() in ("true", "1", "yes") if isinstance(x, str) else bool(x),
         ),
         "min_protondb_rating": get_pref(
             "STEAM_MIN_PROTONDB_RATING", "min_protondb_rating", "gold", str
         ).lower(),
-        "max_game_age_years": get_pref(
-            "STEAM_MAX_GAME_AGE_YEARS", "max_game_age_years", 20, int
-        ),
+        "max_game_age_years": get_pref("STEAM_MAX_GAME_AGE_YEARS", "max_game_age_years", 20, int),
         "min_steam_deck_level": get_pref(
             "STEAM_MIN_DECK_LEVEL", "min_steam_deck_level", "playable", str
         ).lower(),

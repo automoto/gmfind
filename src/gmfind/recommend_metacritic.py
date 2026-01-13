@@ -12,14 +12,14 @@ from urllib.parse import quote
 import requests
 from bs4 import BeautifulSoup
 
-from src.config import load_config
-from src.recommendations.metacritic import MetacriticScraper
-from src.game_check import (
-    fetch_store_data,
-    fetch_steam_deck_status,
-    fetch_protondb_rating,
+from gmfind.config import load_config
+from gmfind.game_check import (
     check_recommendation,
+    fetch_protondb_rating,
+    fetch_steam_deck_status,
+    fetch_store_data,
 )
+from gmfind.recommendations.metacritic import MetacriticScraper
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +111,7 @@ def get_recommendation_with_paths(
     )
 
     scraper = MetacriticScraper()
-    games = scraper.fetch_top_rated_games(
-        min_score=min_score, min_year=min_year, limit=100
-    )
+    games = scraper.fetch_top_rated_games(min_score=min_score, min_year=min_year, limit=100)
 
     if not games:
         logger.error("No games found meeting criteria.")
@@ -150,9 +148,7 @@ def get_recommendation_with_paths(
         rec = check_recommendation(game_data, config_path, block_list_path, owned_ids)
 
         if rec and rec.get("recommended"):
-            logger.info(
-                f"  - Found valid recommendation: {game.name} (AppID: {app_id})"
-            )
+            logger.info(f"  - Found valid recommendation: {game.name} (AppID: {app_id})")
             return app_id
         else:
             reasons = ", ".join(rec.get("reasons", [])) if rec else "Unknown"
@@ -165,9 +161,7 @@ def get_recommendation_with_paths(
 
 def main():
     """CLI entry point for the recommendation script."""
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
     import argparse
 

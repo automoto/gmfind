@@ -1,12 +1,15 @@
 """Module to check game titles against the blocklist."""
 
 import logging
-import yaml
 from pathlib import Path
+
+import yaml
+
+from gmfind.paths import get_blocklist_file
 
 logger = logging.getLogger(__name__)
 
-BLOCK_LIST_FILE = Path("block_list.yaml")
+BLOCK_LIST_FILE = get_blocklist_file()
 
 
 def load_block_list(file_path: Path | str = BLOCK_LIST_FILE) -> list[str]:

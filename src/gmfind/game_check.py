@@ -9,11 +9,10 @@ from typing import Any
 
 import requests
 
-from src.blocklist_checker import load_block_list
-from src.config import load_config
-from src.recommendations.metacritic import MetacriticScraper
-from src.recommendations.protondb import ProtonDBClient
-from src.recommendations.steam_deck import SteamDeckClient
+from gmfind.blocklist_checker import load_block_list
+from gmfind.config import load_config
+from gmfind.recommendations.protondb import ProtonDBClient
+from gmfind.recommendations.steam_deck import SteamDeckClient
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +70,7 @@ def fetch_store_data(app_id: int) -> dict[str, Any]:
 
         # 3rd-party account check
         drm_notice = game_data.get("drm_notice", "")
-        if (
-            "Requires 3rd-Party Account" in drm_notice
-            or "Requires account from" in drm_notice
-        ):
+        if "Requires 3rd-Party Account" in drm_notice or "Requires account from" in drm_notice:
             result["requires_3rd_party_account"] = True
             result["3rd_party_account_details"] = drm_notice
 
@@ -222,9 +218,7 @@ def check_recommendation(
             if meta_score is not None:
                 if meta_score < prefs.min_metacritic_score:
                     is_recommended = False
-                    reasons.append(
-                        f"Metacritic {meta_score} < {prefs.min_metacritic_score}"
-                    )
+                    reasons.append(f"Metacritic {meta_score} < {prefs.min_metacritic_score}")
             elif prefs.require_metacritic_score:
                 # No score available and score is required
                 is_recommended = False
@@ -253,9 +247,7 @@ def check_recommendation(
                 status = deck.get("status")
                 if status and not prefs.meets_steam_deck_level(status):
                     is_recommended = False
-                    reasons.append(
-                        f"Steam Deck {status} < {prefs.min_steam_deck_level}"
-                    )
+                    reasons.append(f"Steam Deck {status} < {prefs.min_steam_deck_level}")
 
             # 3rd Party Account Check
             if game_data.get("requires_3rd_party_account"):
@@ -273,6 +265,146 @@ def check_recommendation(
     return result
 
 
+def check_game_data(
+    app_id: str,
+    config_path: str | None = None,
+    block_list_path: str | None = None,
+    inventory_path: str | None = None,
+) -> dict[str, Any]:
+    """Fetch structured game data for validation.
+
+    Returns a dictionary with game info and validation status:
+    - owned: bool - whether game is in inventory
+    - blocked: bool - whether game matches blocklist
+    - blocked_term: str | None - the matching blocklist term
+    - meets_criteria: bool - whether game meets config preferences
+    - fail_reasons: list[str] - reasons for failing criteria
+    """
+    try:
+        app_id_int = int(app_id)
+    except ValueError:
+        return {"error": "Invalid App ID. Must be an integer."}
+
+    # 1. Store Data
+    store_info = fetch_store_data(app_id_int)
+    if "error" in store_info:
+        return store_info
+
+    output: dict[str, Any] = {
+        "app_id": app_id_int,
+        "name": store_info.get("name"),
+        "type": store_info.get("type"),
+        "release_year": store_info.get("release_year"),
+        "price": store_info.get("price_str"),
+        "price_val": store_info.get("price_val"),
+        "steam_deck": fetch_steam_deck_status(app_id_int),
+        "protondb": fetch_protondb_rating(app_id_int),
+        "metacritic": store_info.get("metacritic"),
+        "metacritic_score": store_info.get("metacritic_score"),
+        "steam_reviews": fetch_steam_reviews(app_id_int),
+        "requires_3rd_party_account": store_info.get("requires_3rd_party_account"),
+        "3rd_party_account_details": store_info.get("3rd_party_account_details"),
+        # Validation fields
+        "owned": False,
+        "blocked": False,
+        "blocked_term": None,
+        "meets_criteria": True,
+        "fail_reasons": [],
+    }
+
+    # 2. Check Inventory
+    if inventory_path:
+        owned_games = _load_owned_games(inventory_path)
+        if app_id_int in owned_games:
+            output["owned"] = True
+            output["meets_criteria"] = False
+            output["fail_reasons"].append("Game is already owned")
+
+    # 3. Check Blocklist
+    if block_list_path and output.get("name"):
+        blocked_terms = load_block_list(block_list_path)
+        name_lower = output["name"].lower()
+        for term in blocked_terms:
+            if term in name_lower:
+                output["blocked"] = True
+                output["blocked_term"] = term
+                output["meets_criteria"] = False
+                output["fail_reasons"].append(f"Blocked term: {term}")
+                break
+
+    # 4. Check App Type (Exclude DLC, etc.)
+    if output.get("type") != "game":
+        output["meets_criteria"] = False
+        output["fail_reasons"].append(f"App type is '{output.get('type')}', not 'game'")
+
+    # 5. Check Config Criteria
+    if config_path:
+        try:
+            config = load_config(config_path)
+            prefs = config.preferences
+
+            # Price Check
+            price = output.get("price_val")
+            if price is not None and price > prefs.max_price:
+                output["meets_criteria"] = False
+                output["fail_reasons"].append(f"Price ${price:.2f} > ${prefs.max_price:.2f}")
+
+            # Metacritic Check
+            meta_score = output.get("metacritic_score")
+            if meta_score is not None:
+                if meta_score < prefs.min_metacritic_score:
+                    output["meets_criteria"] = False
+                    output["fail_reasons"].append(
+                        f"Metacritic {meta_score} < {prefs.min_metacritic_score}"
+                    )
+            elif prefs.require_metacritic_score:
+                output["meets_criteria"] = False
+                output["fail_reasons"].append("No Metacritic score available (required by config)")
+
+            # Age Check
+            release_year = output.get("release_year")
+            if release_year:
+                current_year = datetime.now().year
+                age = current_year - release_year
+                if age > prefs.max_game_age_years:
+                    output["meets_criteria"] = False
+                    output["fail_reasons"].append(
+                        f"Game age {age} years > {prefs.max_game_age_years}"
+                    )
+
+            # ProtonDB Check
+            proton = output.get("protondb")
+            if proton:
+                tier = proton.get("tier")
+                if tier and not prefs.meets_protondb_rating(tier):
+                    output["meets_criteria"] = False
+                    output["fail_reasons"].append(
+                        f"ProtonDB '{tier}' < '{prefs.min_protondb_rating}'"
+                    )
+
+            # Steam Deck Check
+            deck = output.get("steam_deck")
+            if deck:
+                status = deck.get("status")
+                if status and not prefs.meets_steam_deck_level(status):
+                    output["meets_criteria"] = False
+                    output["fail_reasons"].append(
+                        f"Steam Deck '{status}' < '{prefs.min_steam_deck_level}'"
+                    )
+
+            # 3rd Party Account Check
+            if output.get("requires_3rd_party_account"):
+                output["meets_criteria"] = False
+                output["fail_reasons"].append(
+                    f"Requires 3rd-party account: {output.get('3rd_party_account_details')}"
+                )
+
+        except Exception as e:
+            logger.error(f"Config check failed: {e}")
+
+    return output
+
+
 def check_game(
     app_id: str,
     config_path: str | None = None,
@@ -280,44 +412,26 @@ def check_game(
     inventory_path: str | None = None,
 ):
     """Fetch and print structured JSON data for a game."""
-    try:
-        app_id_int = int(app_id)
-    except ValueError:
-        print(json.dumps({"error": "Invalid App ID. Must be an integer."}, indent=2))
-        return
+    data = check_game_data(app_id, config_path, block_list_path, inventory_path)
 
-    # 1. Store Data
-    store_info = fetch_store_data(app_id_int)
-    if "error" in store_info:
-        print(json.dumps(store_info, indent=2))
-        return
-
+    # Format output for display (remove internal fields)
     output = {
-        "app_id": app_id_int,
-        "name": store_info.get("name"),
-        "type": store_info.get("type"),
-        "release_year": store_info.get("release_year"),
-        "price": store_info.get("price_str"),
-        "steam_deck": fetch_steam_deck_status(app_id_int),
-        "protondb": fetch_protondb_rating(app_id_int),
-        "metacritic": store_info.get("metacritic"),
-        "steam_reviews": fetch_steam_reviews(app_id_int),
-        "requires_3rd_party_account": store_info.get("requires_3rd_party_account"),
-        # Internal fields for validation, removed before printing
-        "_price_val": store_info.get("price_val"),
-        "_metacritic_score": store_info.get("metacritic_score"),
+        "app_id": data.get("app_id"),
+        "name": data.get("name"),
+        "type": data.get("type"),
+        "release_year": data.get("release_year"),
+        "price": data.get("price"),
+        "steam_deck": data.get("steam_deck"),
+        "protondb": data.get("protondb"),
+        "metacritic": data.get("metacritic"),
+        "steam_reviews": data.get("steam_reviews"),
+        "requires_3rd_party_account": data.get("requires_3rd_party_account"),
     }
 
-    # 2. Recommendation Logic
-    owned_games = _load_owned_games(inventory_path) if inventory_path else None
-    recommendation = check_recommendation(
-        output, config_path, block_list_path, owned_games
-    )
-    if recommendation:
-        output.update(recommendation)
-
-    # Cleanup internal fields
-    output.pop("_price_val", None)
-    output.pop("_metacritic_score", None)
+    # Add recommendation info if any validation was done
+    if data.get("owned") or data.get("blocked") or data.get("fail_reasons"):
+        output["recommended"] = data.get("meets_criteria", True)
+        if not output["recommended"]:
+            output["reasons"] = data.get("fail_reasons", [])
 
     print(json.dumps(output, indent=2))

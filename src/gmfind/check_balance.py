@@ -1,7 +1,9 @@
 import os
 import re
+
 from playwright.sync_api import sync_playwright
-from src.steam_auth import login, STATE_FILE, USER_AGENT
+
+from gmfind.steam_auth import STATE_FILE, USER_AGENT, login
 
 
 def get_balance() -> float | None:

@@ -1,123 +1,219 @@
-# Steam Bot CLI
+# gmfind: Game Finder
 
-A Python CLI tool for managing Steam account actions like checking wallet balance and purchasing games headlessly using Playwright.
+A Python CLI tool for recommendations and purchasing of PC games. Steam is the store front that is primarily supported for now. The tool will look for high quality games based on steam and metacritic ratings, look for discounts, view compatibility ratings, and manage your library from the terminal.
 
 ## Features
 
-- **Headless Login**: Authenticate with Steam Guard (Email/2FA) directly from your terminal.
-- **Session Persistence**: Login once and stay authenticated for future commands.
-- **Check Balance**: Quickly check your Steam Wallet balance.
-- **Automated Purchase**: Purchase games by App ID using your Steam Wallet.
-- **ProtonDB Checks**: Check Steam Deck compatibility ratings without logging in.
-- **Smart Recommendations**: Filter games based on price, Metacritic score, ProtonDB rating, release year, blocklists, and ownership.
-- **Private Profile Support**: Export game library even if profile/inventory is set to private by using authenticated browser session.
+- **Game Discovery**: Find discounted games filtered by price, Metacritic score, ProtonDB rating, and Steam Deck compatibility.
+- **Compatibility Checks**: Get ProtonDB and Steam Deck verification status for any game.
+- **Smart Filtering**: Exclude games you already own, match blocklist patterns, and enforce preference criteria.
+- **Headless Purchasing**: Buy games using your Steam Wallet with Playwright browser automation.
+- **Private Profile Support**: Export your game library even with a private Steam profile.
 
-## Requirements
+## Safety Notice
 
-- Python 3.10+
-- Steam account with Steam Wallet funds for purchases.
+**Purchases use Steam Wallet only.** This tool will never use credit cards, PayPal, or any external payment methods. All purchases are made exclusively from your Steam Wallet balance.
+
+- The `gmfind buy` command validates games against your config before purchasing
+- Use `gmfind buy --auto` with caution - it will automatically purchase a recommended game
+- Set a conservative `max_price` in your config to limit spending
+- Your Steam Wallet balance acts as a natural spending cap
+
+We recommend adding a small amount to your Steam Wallet and testing with `--headful` mode first to observe the purchase flow before enabling autonomous buying.
 
 ## Installation
 
-1. **Clone the repository:**
-   ```bash
-   cd steam-bot
-   ```
+### For Users
 
-2. **Setup environment and dependencies:**
-   ```bash
-   make install
-   ```
-   This will create a virtual environment, install dependencies from `requirements.txt`, and install the Playwright Chromium browser.
+Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv).
+
+```bash
+# Install globally as a CLI tool
+uv tool install gmfind
+
+# Initialize (installs Playwright browsers and creates config templates)
+gmfind init
+```
+
+Alternative with pipx:
+```bash
+pipx install gmfind
+gmfind init
+```
+
+### For Developers
+
+See [Development](#development) section below.
 
 ## Configuration
 
-Set up your credentials in a `.env` file:
+Set your Steam credentials as environment variables:
 
 ```bash
-cp .env.example .env
+export STEAM_USERNAME="your_username"
+export STEAM_PASSWORD="your_password"
+export STEAM_ID="76561198xxxxxxxxx"
 ```
 
-Edit `.env`:
-```ini
-STEAM_USERNAME=your_username
-STEAM_PASSWORD=your_password
-STEAM_ID=76561198xxxxxxxxx
-```
+Or create a `.env` file in your working directory.
+
+### Config Files
+
+Config files are stored in platform-specific locations:
+- **Linux**: `~/.config/gmfind/`
+- **macOS**: `~/Library/Application Support/gmfind/`
+- **Windows**: `%APPDATA%\gmfind\`
+
+Files:
+- `config.yaml` - Preferences (max price, min ratings, etc.)
+- `block_list.yaml` - Game title patterns to exclude
 
 ## Usage
 
-All commands are executed through `main.py`. Ensure you are using the virtual environment python.
-
-**Option 1: Explicit path**
+### Check Game Details
+Get comprehensive info including price, ProtonDB rating, Steam Deck status, and reviews:
 ```bash
-venv/bin/python main.py <args>
+gmfind check 1145350
 ```
 
-**Option 2: Activate venv first**
+### Find Deals
+Find discounted games matching your preferences:
 ```bash
-source venv/bin/activate
-python main.py <args>
+gmfind deals           # Find 10 deals
+gmfind deals 5         # Find 5 deals
+gmfind deals --output ./deals.md   # Save to file
 ```
 
-The tool will automatically prompt for login if a command requires authentication.
-
-### 1. Purchase a Game (Requires Login)
-Add a game to your library using its App ID.
+### Purchase a Game
+Buy a game by App ID (validates against your config first):
 ```bash
-venv/bin/python main.py --buy <APP_ID>
-```
-*Example: `venv/bin/python main.py --buy 1145350` (Hades II)*
-
-**Note:** By default, the script stops right before the final "Purchase" click for safety. To enable real transactions, you must uncomment the click action in `src/buy_game.py`.
-
-### 2. Check Wallet Balance (Requires Login)
-```bash
-venv/bin/python main.py --balance
+gmfind buy 1145350            # Buy specific game
+gmfind buy 1145350 --force    # Skip validation checks
+gmfind buy 1145350 --headful  # Show browser window
+gmfind buy --auto             # Autonomous: balance -> recommend -> buy
 ```
 
-### 3. Check Game Details (No Login Required)
-Get a structured JSON report including Price, Metacritic, ProtonDB, and Steam Deck status.
-You can also pass configuration files to get a "recommended" boolean based on your preferences.
-
+### Check Wallet Balance
 ```bash
-venv/bin/python main.py --check-game <APP_ID> \
-    --config config.yaml \
-    --block-list block_list.yaml \
-    --inventory my_games.csv
+gmfind balance
 ```
 
-### 4. Check Specific Ratings (No Login Required)
+### Export Game Library
 ```bash
-venv/bin/python main.py --protondb <APP_ID>
-venv/bin/python main.py --deck <APP_ID>
+gmfind inventory --private    # Browser-based (works with private profiles)
+gmfind inventory --public     # API-based (requires public profile)
 ```
 
-### 5. Export Private Inventory (Requires Login)
-If your Steam profile is private, the standard API-based inventory check may fail. Use the browser-based fetcher instead.
+### Check Blocklist
 ```bash
-venv/bin/python main.py --inventory-private [FILENAME.csv]
+gmfind blocklist "FIFA 24"
 ```
 
-## Project Structure
+### Global Options
+```bash
+gmfind --version     # Show version
+gmfind --verbose     # Enable debug logging
+gmfind <cmd> --help  # Command-specific help
+```
 
-- `main.py`: CLI entry point.
-- `src/steam_auth.py`: Headless login and 2FA handling.
-- `src/buy_game.py`: Store navigation and checkout flow.
-- `src/check_balance.py`: Account balance retrieval.
-- `src/game_check.py`: Game details aggregator and recommendation engine.
-- `src/inventory_private.py`: Browser-based inventory fetcher for private profiles.
-- `src/blocklist_checker.py`: Game title filtering.
-- `src/recommendations/protondb.py`: ProtonDB API client.
+### Per-Command Options
+Most commands accept config overrides:
+```bash
+gmfind deals 5 --config ./config.yaml --block-list ./blocklist.yaml
+gmfind check 1145350 --inventory ./my_games.csv
+```
 
 ## Development
 
-- **Linting**: `make lint`
-- **Formatting**: `make format`
-- **Type Checking**: `make type-check`
+### Setup
 
-## Security
+```bash
+# Clone the repository
+git clone https://github.com/your-username/gmfind.git
+cd gmfind
 
-- Credentials are read from `.env` and never hardcoded.
-- Session data is stored locally in `steam_browser_auth.json`.
-- Headless automation mimics real browser behavior.
+# Install in development mode with dev dependencies
+make install
+
+# Initialize Playwright browsers
+make init
+```
+
+### Running Locally
+
+```bash
+# Run commands through uv
+uv run gmfind --help
+uv run gmfind check 1145350
+
+# Or activate the virtual environment
+source .venv/bin/activate
+gmfind --help
+```
+
+### Code Quality
+
+```bash
+make lint        # Run ruff linter
+make format      # Format code with ruff
+make type-check  # Run mypy type checker
+make check       # Run all checks
+```
+
+### Building
+
+```bash
+# Install build tools
+uv pip install build twine
+
+# Build the package
+uv run python -m build
+
+# This creates:
+#   dist/gmfind-0.1.0.tar.gz
+#   dist/gmfind-0.1.0-py3-none-any.whl
+```
+
+### Testing Locally Before Publishing
+
+```bash
+# Create a test environment
+uv venv /tmp/test-gmfind
+source /tmp/test-gmfind/bin/activate
+
+# Install your local build
+pip install dist/gmfind-*.whl
+
+# Test it
+gmfind --version
+gmfind check 1145350
+
+# Clean up
+deactivate
+rm -rf /tmp/test-gmfind
+```
+
+### Publishing
+
+```bash
+# Upload to TestPyPI first
+uv run twine upload --repository testpypi dist/*
+
+# Then upload to PyPI
+uv run twine upload --repository pypi dist/*
+```
+
+### Versioning
+
+Update version in `src/gmfind/__init__.py` before releasing:
+```python
+__version__ = "0.2.0"
+```
+
+Then rebuild and publish.
+
+### Security
+
+- Credentials are read from environment variables, never stored in config files.
+- Session data is stored locally in XDG data directory.
+- Browser automation uses real Chromium with human-like behavior.

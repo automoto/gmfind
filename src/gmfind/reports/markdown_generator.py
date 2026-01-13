@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from src.deals.deals_aggregator import AggregatedDeal
+from gmfind.deals.deals_aggregator import AggregatedDeal
 
 logger = logging.getLogger(__name__)
 
@@ -126,9 +126,7 @@ class MarkdownReportGenerator:
             summary = deal.steam_reviews.get("summary", "")
             total = deal.steam_reviews.get("total", 0)
             if summary and total > 0:
-                about += (
-                    f" The game has received {summary} reviews from {total:,} players."
-                )
+                about += f" The game has received {summary} reviews from {total:,} players."
 
         if deal.short_description:
             about += f"\n\n{deal.short_description}"
@@ -146,13 +144,9 @@ class MarkdownReportGenerator:
         reasons = []
 
         if deal.discount_percent >= 75:
-            reasons.append(
-                f"At {deal.discount_percent}% off, this is an exceptional deal"
-            )
+            reasons.append(f"At {deal.discount_percent}% off, this is an exceptional deal")
         elif deal.discount_percent >= 50:
-            reasons.append(
-                f"With {deal.discount_percent}% off, this represents great value"
-            )
+            reasons.append(f"With {deal.discount_percent}% off, this represents great value")
         else:
             reasons.append(f"Currently {deal.discount_percent}% off")
 
@@ -187,9 +181,7 @@ class MarkdownReportGenerator:
 
         return section
 
-    def _generate_scores_section(
-        self, deal: AggregatedDeal, config: ReportConfig
-    ) -> str:
+    def _generate_scores_section(self, deal: AggregatedDeal, config: ReportConfig) -> str:
         """Generate the scores table."""
         scores = "\n### Scores\n"
         scores += "| Source | Score | Details |\n"
@@ -203,9 +195,7 @@ class MarkdownReportGenerator:
             summary = deal.steam_reviews.get("summary", "")
             total = deal.steam_reviews.get("total", 0)
             percent = deal.steam_reviews.get("percent_positive", 0)
-            scores += (
-                f"| Steam | {percent}% Positive | {total:,} reviews ({summary}) |\n"
-            )
+            scores += f"| Steam | {percent}% Positive | {total:,} reviews ({summary}) |\n"
 
         return scores
 

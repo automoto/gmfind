@@ -9,9 +9,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-ProtonDBTier = Literal[
-    "platinum", "gold", "silver", "bronze", "borked", "pending", "unknown"
-]
+ProtonDBTier = Literal["platinum", "gold", "silver", "bronze", "borked", "pending", "unknown"]
 
 
 @dataclass

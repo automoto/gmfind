@@ -1,6 +1,5 @@
 """Metacritic scraper for game ratings and recommendations."""
 
-import json
 import logging
 import re
 import time
@@ -242,9 +241,7 @@ class MetacriticScraper:
 
         # Find user score (optional)
         user_score = None
-        user_elem = card.select_one(
-            ".c-siteReviewScore_user, .user, [data-testid='user-score']"
-        )
+        user_elem = card.select_one(".c-siteReviewScore_user, .user, [data-testid='user-score']")
         if user_elem:
             try:
                 user_text = user_elem.get_text(strip=True)
@@ -360,8 +357,15 @@ class MetacriticScraper:
         normalized = normalized.replace(":", "").replace("-", " ").replace("  ", " ")
         # Convert roman numerals to arabic for consistency
         roman_map = {
-            " ii ": " 2 ", " iii ": " 3 ", " iv ": " 4 ", " v ": " 5 ",
-            " vi ": " 6 ", " vii ": " 7 ", " viii ": " 8 ", " ix ": " 9 ", " x ": " 10 ",
+            " ii ": " 2 ",
+            " iii ": " 3 ",
+            " iv ": " 4 ",
+            " v ": " 5 ",
+            " vi ": " 6 ",
+            " vii ": " 7 ",
+            " viii ": " 8 ",
+            " ix ": " 9 ",
+            " x ": " 10 ",
         }
         # Add spaces for end-of-string matching
         normalized = f" {normalized} "
@@ -449,9 +453,7 @@ class MetacriticScraper:
             logger.debug(f"Failed to parse search result: {e}")
             return None
 
-    def get_critic_reviews(
-        self, game_slug: str, limit: int = 5
-    ) -> list[MetacriticReviewQuote]:
+    def get_critic_reviews(self, game_slug: str, limit: int = 5) -> list[MetacriticReviewQuote]:
         """Fetch critic review quotes for a game.
 
         Args:
@@ -478,9 +480,7 @@ class MetacriticScraper:
 
         return reviews
 
-    def _parse_critic_reviews(
-        self, soup: BeautifulSoup, limit: int
-    ) -> list[MetacriticReviewQuote]:
+    def _parse_critic_reviews(self, soup: BeautifulSoup, limit: int) -> list[MetacriticReviewQuote]:
         """Parse critic reviews from a Metacritic reviews page.
 
         Metacritic uses Nuxt.js with client-side rendering, so reviews are
@@ -505,9 +505,7 @@ class MetacriticScraper:
             return reviews
 
         # Fallback: Try legacy CSS selectors for older page versions
-        review_cards = soup.select(
-            ".c-siteReview, .review_content, [data-testid='critic-review']"
-        )
+        review_cards = soup.select(".c-siteReview, .review_content, [data-testid='critic-review']")
 
         for card in review_cards:
             if len(reviews) >= limit:
@@ -567,7 +565,7 @@ class MetacriticScraper:
         publications = re.findall(pub_pattern, script_text)
 
         # Find all scores (numeric values after "score:")
-        score_pattern = r'(?<![a-zA-Z])score:(\d+)'
+        score_pattern = r"(?<![a-zA-Z])score:(\d+)"
         scores = re.findall(score_pattern, script_text)
 
         # Find all quotes
@@ -614,7 +612,9 @@ class MetacriticScraper:
             MetacriticReviewQuote or None.
         """
         try:
-            outlet = review_data.get("publicationName") or review_data.get("publication", {}).get("name", "Unknown")
+            outlet = review_data.get("publicationName") or review_data.get("publication", {}).get(
+                "name", "Unknown"
+            )
             score = review_data.get("score")
             quote = review_data.get("quote", "")
             url = review_data.get("url") or review_data.get("externalUrl")

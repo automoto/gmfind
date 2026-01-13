@@ -5,44 +5,45 @@ and Steam Guard (2FA) code handling.
 
 Usage:
     # Simple login (saves session for future use)
-    from src.steam_auth import login
+    from gmfind.steam_auth import login
     login()
 
     # Use authenticated session
-    from src.steam_auth import get_authenticated_context
+    from gmfind.steam_auth import get_authenticated_context
     with get_authenticated_context() as (context, page):
         page.goto("https://store.steampowered.com/account/")
         # ... do authenticated operations
 
     # Or use the lower-level API
-    from src.steam_auth import SteamAuth
+    from gmfind.steam_auth import SteamAuth
     auth = SteamAuth()
     if auth.ensure_logged_in():
         # Session is ready to use
         pass
 """
 
-import os
 import logging
+import os
 import time
-from pathlib import Path
 from contextlib import contextmanager
-from typing import Optional, Generator, Tuple
+from pathlib import Path
+from typing import Generator, Optional, Tuple
 
-from playwright.sync_api import sync_playwright, Page, BrowserContext
 from dotenv import load_dotenv
+from playwright.sync_api import BrowserContext, Page, sync_playwright
 
 # Load environment variables
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+# Import path utilities for XDG-compliant paths
+from gmfind.paths import get_session_file
+
 # Constants (exported for backward compatibility)
-STATE_FILE = Path("steam_browser_auth.json")
+STATE_FILE = get_session_file()
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "

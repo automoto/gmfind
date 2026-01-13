@@ -1,0 +1,101 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gmfind"
+version = "0.1.0"
+description = "Steam automation CLI - find games, check deals, purchase, and manage your Steam library"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "gmfind contributors" }
+]
+keywords = ["steam", "cli", "automation", "gaming", "deals", "playwright"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment",
+]
+
+dependencies = [
+    "playwright>=1.40.0",
+    "httpx>=0.25.0",
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "pyyaml>=6.0",
+    "pydantic>=2.5.0",
+    "python-dotenv>=1.0.0",
+    "steam[client]>=1.4.4",
+    "platformdirs>=4.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+    "types-requests",
+    "types-PyYAML",
+    "pytest>=7.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/automoto/gmfind"
+Repository = "https://github.com/automoto/gmfind"
+Issues = "https://github.com/automoto/gmfind/issues"
+
+[project.scripts]
+gmfind = "gmfind.cli:main"
+gmfind-setup = "gmfind.setup:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gmfind"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.github",
+    "/.vscode",
+    "/.claude",
+    "/docs",
+    "/tests",
+    "/plans",
+    "/scripts",
+    "/venv",
+    "*.env",
+    "*.env.*",
+    ".env*",
+    "steam_browser_auth.json",
+    "steam_session.json",
+    "*_auth.json",
+    "*.log",
+    "*.csv",
+    "*.png",
+    "/logs",
+    "/.mypy_cache",
+    "/.ruff_cache",
+    "__pycache__",
+    "Makefile",
+    "test_*.py",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_ignores = true
+ignore_missing_imports = true

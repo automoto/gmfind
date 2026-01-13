@@ -5,16 +5,16 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from src.blocklist_checker import load_block_list
-from src.config import load_config, Config, PreferencesConfig
-from src.game_check import (
+from gmfind.blocklist_checker import load_block_list
+from gmfind.config import Config, PreferencesConfig, load_config
+from gmfind.game_check import (
+    _load_owned_games,
     fetch_protondb_rating,
     fetch_steam_deck_status,
     fetch_steam_reviews,
     fetch_store_data,
-    _load_owned_games,
 )
-from src.recommendations.metacritic import MetacriticScraper
+from gmfind.recommendations.metacritic import MetacriticScraper
 
 from .steam_specials import SteamDeal
 
@@ -171,9 +171,7 @@ class DealsAggregator:
                 continue
 
             if self.prefs and deal.sale_price > self.prefs.max_price:
-                logger.debug(
-                    f"Skipping expensive game: {deal.name} (${deal.sale_price})"
-                )
+                logger.debug(f"Skipping expensive game: {deal.name} (${deal.sale_price})")
                 continue
 
             filtered.append(deal)
@@ -311,7 +309,14 @@ class DealsAggregator:
             return False
 
         # ProtonDB tier ranking (higher is better)
-        proton_tiers = {"platinum": 5, "gold": 4, "silver": 3, "bronze": 2, "borked": 1, "unknown": 0}
+        proton_tiers = {
+            "platinum": 5,
+            "gold": 4,
+            "silver": 3,
+            "bronze": 2,
+            "borked": 1,
+            "unknown": 0,
+        }
         min_proton_tier = self.prefs.min_protondb_rating.lower()
         min_proton_rank = proton_tiers.get(min_proton_tier, 0)
 

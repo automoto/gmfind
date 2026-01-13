@@ -1,16 +1,16 @@
 """Steam game purchasing script using Playwright (Sync)."""
 
-import os
 import argparse
-import time
 import logging
+import os
+import time
+
 from playwright.sync_api import sync_playwright
-from src.steam_auth import login, STATE_FILE, USER_AGENT
+
+from gmfind.steam_auth import STATE_FILE, USER_AGENT, login
 
 # Setup basic logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -94,9 +94,7 @@ class SteamCheckout:
                 .filter(visible=True)
             )
             if remove_btns.count() > 0:
-                logger.info(
-                    f"Removing item from cart via DOM (Items: {remove_btns.count()})..."
-                )
+                logger.info(f"Removing item from cart via DOM (Items: {remove_btns.count()})...")
                 remove_btns.first.click()
                 time.sleep(1)
             else:
@@ -188,10 +186,7 @@ class SteamCheckout:
                 return True
             except Exception as e:
                 # Check if we're actually on the receipt page even if wait_for failed
-                if (
-                    "thankyou" in self.page.url.lower()
-                    or "receipt" in self.page.url.lower()
-                ):
+                if "thankyou" in self.page.url.lower() or "receipt" in self.page.url.lower():
                     logger.info("[SUCCESS] Purchase confirmed by URL.")
                     return True
 

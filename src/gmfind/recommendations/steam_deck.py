@@ -22,9 +22,7 @@ class SteamDeckReport:
 class SteamDeckClient:
     """Checks official Steam Deck compatibility via Steam Store API."""
 
-    API_URL = (
-        "https://store.steampowered.com/saleaction/ajaxgetdeckappcompatibilityreport"
-    )
+    API_URL = "https://store.steampowered.com/saleaction/ajaxgetdeckappcompatibilityreport"
 
     def get_status(self, app_id: int) -> SteamDeckReport:
         """Fetch the official Steam Deck compatibility report."""
