@@ -25,7 +25,7 @@ def _load_owned_games(csv_path: str) -> set[int]:
     owned_ids: set[int] = set()
     path = Path(csv_path)
     if not path.exists():
-        logger.warning(f"Inventory file not found: {path}")
+        logger.debug(f"Inventory file not found: {path}")
         return owned_ids
 
     try:
@@ -204,7 +204,7 @@ def check_recommendation(
     # Check Config Criteria
     if config_path and is_recommended:
         try:
-            config = load_config(config_path)
+            config = load_config(config_path, require_credentials=False)
             prefs = config.preferences
 
             # Price Check
@@ -340,7 +340,7 @@ def check_game_data(
     # 5. Check Config Criteria
     if config_path:
         try:
-            config = load_config(config_path)
+            config = load_config(config_path, require_credentials=False)
             prefs = config.preferences
 
             # Price Check
@@ -400,7 +400,7 @@ def check_game_data(
                 )
 
         except Exception as e:
-            logger.error(f"Config check failed: {e}")
+            logger.debug(f"Config not available, skipping preference checks: {e}")
 
     return output
 

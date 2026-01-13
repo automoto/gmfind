@@ -44,6 +44,12 @@ def get_owned_app_ids(inventory_path: str) -> set[int]:
 
 def search_steam_for_app_id(game_name: str) -> int | None:
     """Search Steam for a game and return the first matching App ID."""
+    result = search_steam(game_name)
+    return result[0] if result else None
+
+
+def search_steam(game_name: str) -> tuple[int, str] | None:
+    """Search Steam for a game and return (app_id, title) or None."""
 
     # Simple normalization for comparison
     def normalize(s):
@@ -87,7 +93,7 @@ def search_steam_for_app_id(game_name: str) -> int | None:
                     logger.info(
                         f"  - Search match: '{result_name}' for query '{game_name}' (AppID: {app_id})"
                     )
-                    return app_id
+                    return (app_id, result_name)
 
     except Exception as e:
         logger.warning(f"Failed to search Steam for '{game_name}': {e}")

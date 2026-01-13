@@ -7,6 +7,7 @@ import time
 
 from playwright.sync_api import sync_playwright
 
+from gmfind.paths import get_screenshots_dir
 from gmfind.steam_auth import STATE_FILE, USER_AGENT, login
 
 # Setup basic logging
@@ -191,11 +192,11 @@ class SteamCheckout:
                     return True
 
                 logger.error(f"[FAILURE] Verification timed out or failed: {e}")
-                self.page.screenshot(path="purchase_failed.png")
+                self.page.screenshot(path=str(get_screenshots_dir() / "purchase_failed.png"))
                 return False
         else:
             logger.error("Could not find final Purchase button.")
-            self.page.screenshot(path="checkout_failed.png")
+            self.page.screenshot(path=str(get_screenshots_dir() / "checkout_failed.png"))
             return False
 
 
@@ -269,7 +270,7 @@ def buy_game(app_id, headless=True):
                 add_btn.click()
             else:
                 logger.error("Add to cart button not found.")
-                page.screenshot(path="add_to_cart_failed.png")
+                page.screenshot(path=str(get_screenshots_dir() / "add_to_cart_failed.png"))
                 return False
 
             # 2. Checkout
@@ -277,7 +278,7 @@ def buy_game(app_id, headless=True):
 
         except Exception as e:
             logger.error(f"Error: {e}")
-            page.screenshot(path="error.png")
+            page.screenshot(path=str(get_screenshots_dir() / "error.png"))
             return False
         finally:
             # If headful, wait a bit so user can see

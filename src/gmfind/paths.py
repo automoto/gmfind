@@ -92,6 +92,13 @@ def get_log_dir() -> Path:
     return log_dir
 
 
+def get_screenshots_dir() -> Path:
+    """Get screenshots directory for error debugging."""
+    screenshots_dir = get_cache_dir() / "screenshots"
+    screenshots_dir.mkdir(parents=True, exist_ok=True)
+    return screenshots_dir
+
+
 def get_log_file() -> Path:
     """Get main log file path."""
     return get_log_dir() / "gmfind.log"
@@ -104,6 +111,7 @@ def ensure_directories() -> None:
     get_cache_dir()
     get_log_dir()
     get_reports_dir()
+    get_screenshots_dir()
 
 
 def get_example_config() -> str:

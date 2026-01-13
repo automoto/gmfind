@@ -58,6 +58,7 @@ check: lint type-check
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	rm -rf dist/*
 	rm -rf .mypy_cache .ruff_cache .pytest_cache
 
 # ============ Commands ============
@@ -105,8 +106,8 @@ build: clean
 
 publish-test: build
 	uv pip install twine
-	uv run twine upload --repository testpypi dist/*
+	uv run twine upload --repository testpypi --verbose dist/*
 
 publish: build
 	uv pip install twine
-	uv run twine upload --repository pypi dist/*
+	uv run twine upload --repository pypi --verbose dist/*

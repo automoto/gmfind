@@ -109,6 +109,13 @@ gmfind inventory --public     # API-based (requires public profile)
 gmfind blocklist "FIFA 24"
 ```
 
+### Find Steam App ID
+Look up a game's Steam App ID by title:
+```bash
+gmfind id "Hades"
+```
+Output: `{"steam_id": 1145360, "title": "Hades"}`
+
 ### Global Options
 ```bash
 gmfind --version     # Show version
@@ -217,3 +224,21 @@ Then rebuild and publish.
 - Credentials are read from environment variables, never stored in config files.
 - Session data is stored locally in XDG data directory.
 - Browser automation uses real Chromium with human-like behavior.
+
+### Troubleshooting
+
+When errors occur during login or purchase, screenshots are automatically saved for debugging.
+
+**File locations** (platform-specific):
+- **Linux**: `~/.cache/gmfind/`
+- **macOS**: `~/Library/Caches/gmfind/`
+- **Windows**: `%LOCALAPPDATA%\gmfind\Cache\`
+
+**Troubleshooting files:**
+- `screenshots/` - Error screenshots (e.g., `login_failed.png`, `purchase_failed.png`)
+- `logs/gmfind.log` - Application logs
+
+**Common issues:**
+- Login fails: Check `screenshots/login_*.png` for the browser state at failure
+- Purchase fails: Check `screenshots/purchase_failed.png` or `checkout_failed.png`
+- Run with `--headful` flag to watch the browser in real-time

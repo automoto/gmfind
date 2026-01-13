@@ -26,9 +26,9 @@ STEAM_DECK_LEVEL_ORDER = ["verified", "playable", "unsupported", "unknown"]
 class SteamConfig(BaseModel):
     """Steam account configuration."""
 
-    username: str = Field(..., min_length=1)
-    password: str = Field(..., min_length=1)
-    steam_id: str = Field(..., pattern=r"^\d{17}$")
+    username: str | None = Field(default=None)
+    password: str | None = Field(default=None)
+    steam_id: str | None = Field(default=None)
 
 
 class PreferencesConfig(BaseModel):
@@ -69,20 +69,22 @@ class Config(BaseModel):
     preferences: PreferencesConfig = Field(default_factory=PreferencesConfig)
 
 
-def load_config(config_path: str | Path | None = None) -> Config:
+def load_config(config_path: str | Path | None = None, require_credentials: bool = True) -> Config:
     """Load configuration from YAML file and environment variables.
 
     Environment variables take precedence over config file values for credentials.
 
     Args:
         config_path: Path to the YAML configuration file.
+        require_credentials: If True, raise error when credentials are missing.
+            Set to False for commands that only need preferences (e.g., deals).
 
     Returns:
         Validated Config object.
 
     Raises:
         FileNotFoundError: If config file doesn't exist.
-        ValueError: If required credentials are missing.
+        ValueError: If required credentials are missing (when require_credentials=True).
         pydantic.ValidationError: If configuration is invalid.
     """
     # Use XDG default if no path specified
@@ -97,22 +99,21 @@ def load_config(config_path: str | Path | None = None) -> Config:
         with open(config_path) as f:
             yaml_config = yaml.safe_load(f) or {}
 
-    # Get credentials from environment variables (required)
+    # Get credentials from environment variables
     username = os.getenv("STEAM_USERNAME")
     password = os.getenv("STEAM_PASSWORD")
-
-    if not username:
-        raise ValueError("STEAM_USERNAME environment variable is required")
-    if not password:
-        raise ValueError("STEAM_PASSWORD environment variable is required")
-
-    # Get steam_id from env var or config file
     steam_id = os.getenv("STEAM_ID") or yaml_config.get("steam", {}).get("steam_id")
 
-    if not steam_id:
-        raise ValueError(
-            "Steam ID is required. Set STEAM_ID env var or steam.steam_id in config.yaml"
-        )
+    # Only validate credentials if required
+    if require_credentials:
+        if not username:
+            raise ValueError("STEAM_USERNAME environment variable is required")
+        if not password:
+            raise ValueError("STEAM_PASSWORD environment variable is required")
+        if not steam_id:
+            raise ValueError(
+                "Steam ID is required. Set STEAM_ID env var or steam.steam_id in config.yaml"
+            )
 
     # Get preferences from env vars with fallback to YAML config
     yaml_prefs = yaml_config.get("preferences", {})

@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import os
 import sys
 import time
 
@@ -16,19 +17,43 @@ from gmfind.paths import (
 
 
 def _setup_logging(verbose: bool = False) -> logging.Logger:
-    """Configure logging to XDG cache directory."""
+    """Configure logging to XDG cache directory.
+
+    By default, only warnings are shown on console. Set GMFIND_DEBUG=1 or use
+    --verbose flag to see detailed logs on console. All logs are always written
+    to the log file for troubleshooting.
+    """
     ensure_directories()
     log_file = get_log_file()
 
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(log_file),
-        ],
+    # Check environment variable for debug mode
+    debug_env = os.getenv("GMFIND_DEBUG", "").lower()
+
+    # Determine console log level
+    if verbose or debug_env in ("1", "true", "yes"):
+        console_level = logging.INFO
+    else:
+        console_level = logging.WARNING  # Quiet by default
+
+    # File always logs at INFO level for troubleshooting
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     )
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(console_level)
+    console_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
+
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)  # Capture all, handlers filter
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+
     return logging.getLogger(__name__)
 
 
@@ -68,6 +93,22 @@ def cmd_blocklist(args) -> int:
     else:
         check_blocklist(args.title)
     return 0
+
+
+def cmd_id(args) -> int:
+    """Handle 'gmfind id <TITLE>' command."""
+    import json
+
+    from gmfind.recommend_metacritic import search_steam
+
+    result = search_steam(args.title)
+    if result:
+        app_id, title = result
+        print(json.dumps({"steam_id": app_id, "title": title}))
+        return 0
+    else:
+        print(f"[ERROR] No match found for: {args.title}", file=sys.stderr)
+        return 1
 
 
 def cmd_check(args) -> int:
@@ -113,9 +154,9 @@ def cmd_deals(args) -> int:
         else:
             final_path = args.output
 
-    # Load config for preferences
+    # Load config for preferences (credentials not needed for deals)
     try:
-        config = load_config(config_path)
+        config = load_config(config_path, require_credentials=False)
         preferences = {
             "max_price": config.preferences.max_price,
             "min_metacritic_score": config.preferences.min_metacritic_score,
@@ -127,12 +168,15 @@ def cmd_deals(args) -> int:
         preferences = {}
 
     # Fetch deals from Steam
+    print("Searching for deals...", end="", flush=True)
     logger.info("Fetching deals from Steam...")
     steam_fetcher = SteamSpecialsFetcher()
     steam_deals = steam_fetcher.fetch_deals(limit=count * 5)
     logger.info(f"Found {len(steam_deals)} Steam deals")
+    print(f" found {len(steam_deals)}.", flush=True)
 
     # Filter and enrich
+    print("Filtering and enriching deals...", end="", flush=True)
     logger.info("Filtering and enriching deals...")
     aggregator = DealsAggregator(config_path, block_list_path, inventory_path, args.skip_inventory)
     enriched_deals = aggregator.get_filtered_enriched_deals(
@@ -140,10 +184,11 @@ def cmd_deals(args) -> int:
         limit=count,
         review_limit=3,
     )
+    print(" done.", flush=True)
 
     if not enriched_deals:
         logger.warning("No deals found matching your criteria.")
-        print("\n[WARNING] No deals found matching your criteria.")
+        print("[WARNING] No deals found matching your criteria.")
         print("Try adjusting your config.yaml settings (max_price, min_metacritic_score, etc.)")
         return 1
 
@@ -435,6 +480,7 @@ def create_parser() -> argparse.ArgumentParser:
         epilog="""
 Examples:
   gmfind init                     Initialize config and install Playwright
+  gmfind id "Hades"               Find Steam App ID for a game
   gmfind check 1145350            Get full game details
   gmfind deals 5                  Find top 5 deals
   gmfind buy 1145350              Buy a specific game
@@ -493,6 +539,14 @@ Examples:
     check_parser.add_argument("app_id", help="Steam App ID to check")
     _add_config_options(check_parser, config=True, blocklist=True, inventory=True)
     check_parser.set_defaults(func=cmd_check)
+
+    # --- id ---
+    id_parser = subparsers.add_parser(
+        "id",
+        help="Search for a game's Steam App ID by title",
+    )
+    id_parser.add_argument("title", help="Game title to search for")
+    id_parser.set_defaults(func=cmd_id)
 
     # --- deals ---
     deals_parser = subparsers.add_parser(

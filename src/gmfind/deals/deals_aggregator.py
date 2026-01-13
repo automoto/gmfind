@@ -104,7 +104,7 @@ class DealsAggregator:
         self.prefs: PreferencesConfig | None = None
 
         try:
-            self.config = load_config(config_path)
+            self.config = load_config(config_path, require_credentials=False)
             self.prefs = self.config.preferences
         except Exception as e:
             logger.warning(f"Failed to load config: {e}")

@@ -40,7 +40,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Import path utilities for XDG-compliant paths
-from gmfind.paths import get_session_file
+from gmfind.paths import get_screenshots_dir, get_session_file
 
 # Constants (exported for backward compatibility)
 STATE_FILE = get_session_file()
@@ -298,7 +298,7 @@ class SteamAuth:
             True if login successful, False otherwise
         """
         if not self._username or not self._password:
-            logger.error("STEAM_USERNAME or STEAM_PASSWORD not set in .env")
+            logger.error("STEAM_USERNAME or STEAM_PASSWORD environment variables not set")
             return False
 
         # Check for existing valid session
@@ -333,7 +333,7 @@ class SteamAuth:
                 username_input = self._find_username_input(page)
                 if not username_input:
                     logger.error("Could not find username input field")
-                    page.screenshot(path="login_error_username.png")
+                    page.screenshot(path=str(get_screenshots_dir() / "login_error_username.png"))
                     return False
 
                 logger.info("Entering username...")
@@ -345,7 +345,7 @@ class SteamAuth:
                 password_input = self._find_password_input(page)
                 if not password_input:
                     logger.error("Could not find password input field")
-                    page.screenshot(path="login_error_password.png")
+                    page.screenshot(path=str(get_screenshots_dir() / "login_error_password.png"))
                     return False
 
                 logger.info("Entering password...")
@@ -357,7 +357,7 @@ class SteamAuth:
                 submit_btn = self._find_submit_button(page)
                 if not submit_btn:
                     logger.error("Could not find login submit button")
-                    page.screenshot(path="login_error_submit.png")
+                    page.screenshot(path=str(get_screenshots_dir() / "login_error_submit.png"))
                     return False
 
                 logger.info("Submitting login...")
@@ -368,7 +368,7 @@ class SteamAuth:
 
             except Exception as e:
                 logger.error(f"Login error: {e}")
-                page.screenshot(path="login_crash.png")
+                page.screenshot(path=str(get_screenshots_dir() / "login_crash.png"))
                 return False
             finally:
                 browser.close()
@@ -394,7 +394,6 @@ class SteamAuth:
             twofa_type = self._detect_2fa_prompt(page)
             if twofa_type:
                 logger.info(f"2FA prompt detected: {twofa_type}")
-                page.screenshot(path="2fa_prompt.png")
 
                 # Request code from user
                 print("\n" + "=" * 50)
@@ -422,11 +421,11 @@ class SteamAuth:
             error = self._detect_error(page)
             if error:
                 logger.error(f"Login failed: {error}")
-                page.screenshot(path="login_failed.png")
+                page.screenshot(path=str(get_screenshots_dir() / "login_failed.png"))
                 return False
 
         logger.error("Login timed out")
-        page.screenshot(path="login_timeout.png")
+        page.screenshot(path=str(get_screenshots_dir() / "login_timeout.png"))
         return False
 
     def _save_session(self, context: BrowserContext) -> None:
