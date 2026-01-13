@@ -56,10 +56,7 @@ type-check:
 check: lint type-check
 
 clean:
-	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	rm -rf dist/*
-	rm -rf .mypy_cache .ruff_cache .pytest_cache
+	rm -rf dist/ .mypy_cache .ruff_cache .pytest_cache
 
 # ============ Commands ============
 

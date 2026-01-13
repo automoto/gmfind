@@ -1,0 +1,17 @@
+# Example of a config that looks for games with high proton db and steam deck compatbility
+preferences:
+  # Maximum price in USD for a game purchase
+  max_price: 20.00
+
+  # Minimum Metacritic score (0-100)
+  min_metacritic_score: 75
+
+  # Minimum ProtonDB rating for Steam Deck compatibility
+  # Options: platinum, gold, silver, bronze, borked
+  min_protondb_rating: "gold"
+
+  # Maximum age of games to consider (in years)
+  max_game_age_years: 20
+
+  # Minimum steam deck compatbility level
+  min_steam_deck_level: "playable"

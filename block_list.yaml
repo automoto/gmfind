@@ -4,14 +4,4 @@
 
 blocked_terms:
   # Add terms here, one per line
-  - "FIFA"
-  - "Madden"
-  - "NBA 2K"
-  - "Visual Novel"
-  - "half life"
-  - "cuphead"
-  - "assasins creed"
-  - "halo"
-  - "split fiction"
-  - "lego"
-  - "call of duty"
+  - ""

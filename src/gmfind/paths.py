@@ -118,31 +118,35 @@ def get_example_config() -> str:
     """Return example config.yaml content."""
     return """preferences:
   # Maximum price in USD for a game purchase
-  max_price: 20.00
+  max_price: 50.00
 
   # Minimum Metacritic score (0-100)
   min_metacritic_score: 75
 
   # Require games to have a Metacritic score (true/false)
+  # When false: games without scores are allowed (good for indie games)
+  # When true: games must have a score >= min_metacritic_score
   require_metacritic_score: false
 
-  # Minimum ProtonDB rating: platinum, gold, silver, bronze, borked
-  min_protondb_rating: "gold"
+  # Minimum ProtonDB rating for Steam Deck compatibility
+  # Options: platinum, gold, silver, bronze, borked, unknown
+  min_protondb_rating: "unknown"
 
   # Maximum age of games to consider (in years)
   max_game_age_years: 10
 
-  # Minimum Steam Deck level: verified, playable, unsupported, unknown
-  min_steam_deck_level: "playable"
+  # Minimum steam deck compatbility level. verified, playable, unsupported, unknown
+  min_steam_deck_level: "unknown"
 """
 
 
 def get_example_blocklist() -> str:
     """Return example block_list.yaml content."""
     return """# Games to exclude from recommendations
-# Add game titles (partial matches supported)
-blocked_titles:
-  - "Visual Novel"
-  - "Anime"
-  - "Dating Sim"
+# Any game whose name partially matches these terms (case-insensitive) will be skipped
+# Examples: "FIFA" would block "FIFA 23", "FIFA 24", etc.
+
+blocked_terms:
+  # Add terms here, one per line
+  - ""
 """
