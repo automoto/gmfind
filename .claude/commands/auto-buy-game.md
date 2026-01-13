@@ -33,7 +33,7 @@ Metroidvania, Adventure, RTS, Strategy, Fighting, Military, FPS, Souls-like
 First, read config.yaml to understand the user's current preferences:
 
 ```bash
-cat /Users/mydev/code/steam-bot/config.yaml
+cat config.yaml
 ```
 
 Display a summary of the current criteria so the user knows what filters will be applied.
@@ -42,7 +42,7 @@ Display a summary of the current criteria so the user knows what filters will be
 Check the Steam Wallet balance:
 
 ```bash
-cd /Users/mydev/code/steam-bot && venv/bin/python main.py --balance
+uv run gmfind balance
 ```
 
 **CRITICAL**: Compare the balance against max_price from config.yaml. If the balance is less than max_price, STOP immediately and report:
@@ -83,7 +83,7 @@ Skip games that can't be found on Steam. Games MUST be available on Steam.
 For each App ID in order, run this command using Bash:
 
 ```bash
-cd /Users/mydev/code/steam-bot && venv/bin/python main.py --check-game <APP_ID> --config config.yaml --block-list block_list.yaml
+uv run gmfind check <APP_ID> --config config.yaml --block-list block_list.yaml
 ```
 
 The CLI will validate the game against ALL criteria in config.yaml:
@@ -121,7 +121,7 @@ Proceeding with automatic purchase...
 Then run:
 
 ```bash
-cd /Users/mydev/code/steam-bot && venv/bin/python main.py --buy <APP_ID>
+uv run gmfind buy <APP_ID>
 ```
 
 ### Step 8: Report Results
@@ -142,7 +142,6 @@ Purchase failed for [GAME NAME].
 Error: [error message from output]
 
 Troubleshooting:
-- Check purchase_failed.png for a screenshot of the error
 - Try running with --headful flag for visual debugging
 - Verify Steam login session is still valid
 ```

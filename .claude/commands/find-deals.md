@@ -31,7 +31,7 @@ Search for discounted Steam games and generate a detailed markdown report with r
 First, read config.yaml to understand the user's current preferences:
 
 ```bash
-cat /Users/mydev/code/steam-bot/config.yaml
+cat config.yaml
 ```
 
 Display a summary of the current criteria:
@@ -56,10 +56,10 @@ Tell the user:
 Execute the deals finder command:
 
 ```bash
-cd /Users/mydev/code/steam-bot && venv/bin/python main.py --find-deals <COUNT> --config config.yaml --block-list block_list.yaml [--deals-output <PATH>] [--skip-inventory]
+uv run gmfind deals <COUNT> --config config.yaml --block-list block_list.yaml [-o <PATH>] [--skip-inventory]
 ```
 
-- Add `--deals-output <PATH>` if `-o` or `--output` was specified in the arguments
+- Add `-o <PATH>` if `-o` or `--output` was specified in the arguments
 - Add `--skip-inventory` flag only if it was specified in the arguments
 - If no output path specified, markdown is printed to stdout
 

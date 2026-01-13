@@ -29,7 +29,7 @@ Metroidvania, Adventure, RTS, Strategy, Fighting, Military, FPS, Souls-like
 First, read config.yaml to understand the user's current preferences:
 
 ```bash
-cat /Users/mydev/code/steam-bot/config.yaml
+cat config.yaml
 ```
 
 Display a summary of the current criteria to the user so they know what filters will be applied.
@@ -61,13 +61,19 @@ For each game title, resolve its Steam App ID:
 3. Extract the App ID from the first matching result
 4. If WebFetch fails, try WebSearch: `[game name] Steam store app id`
 
+**Verify the result** using the CLI:
+```bash
+uv run gmfind id "<game title>"
+```
+This returns JSON with `steam_id` and `title` to confirm you have the correct App ID.
+
 Skip games that can't be found on Steam. Games MUST be available on Steam.
 
 ### Step 5: Validate Each Game
 For each App ID found, run this command using Bash:
 
 ```bash
-cd /Users/mydev/code/steam-bot && venv/bin/python main.py --check-game <APP_ID> --config config.yaml --block-list block_list.yaml
+uv run gmfind check <APP_ID> --config config.yaml --block-list block_list.yaml
 ```
 
 The CLI will validate the game against ALL criteria in config.yaml:

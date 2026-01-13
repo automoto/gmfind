@@ -29,7 +29,7 @@ Metroidvania, Adventure, RTS, Strategy, Fighting, Military, FPS, Souls-like
 First, check the Steam Wallet balance:
 
 ```bash
-cd /Users/mydev/code/steam-bot && venv/bin/python main.py --balance
+uv run gmfind balance
 ```
 
 Report the current balance to the user. If balance is $0 or retrieval fails, warn that purchases may fail.
@@ -38,7 +38,7 @@ Report the current balance to the user. If balance is $0 or retrieval fails, war
 Read config.yaml to understand the user's current preferences:
 
 ```bash
-cat /Users/mydev/code/steam-bot/config.yaml
+cat config.yaml
 ```
 
 Display a summary of the current criteria so the user knows what filters will be applied.
@@ -70,13 +70,19 @@ For each game title, resolve its Steam App ID:
 3. Extract the App ID from the first matching result
 4. If WebFetch fails, try WebSearch: `[game name] Steam store app id`
 
+**Verify the result** using the CLI:
+```bash
+uv run gmfind id "<game title>"
+```
+This returns JSON with `steam_id` and `title` to confirm you have the correct App ID.
+
 Skip games that can't be found on Steam. Games MUST be available on Steam.
 
 ### Step 6: Validate Each Game
 For each App ID found, run this command using Bash:
 
 ```bash
-cd /Users/mydev/code/steam-bot && venv/bin/python main.py --check-game <APP_ID> --config config.yaml --block-list block_list.yaml
+uv run gmfind check <APP_ID> --config config.yaml --block-list block_list.yaml
 ```
 
 The CLI will validate the game against ALL criteria in config.yaml:
@@ -98,7 +104,7 @@ Present the FIRST validated game with full details and source attribution:
 
 **Source**: Found via [PC Gamer/Rock Paper Shotgun/IGN/etc.]
 **Steam Link**: https://store.steampowered.com/app/[APP_ID]
-**Validated by**: steam-bot --check-game (passed all config.yaml criteria)
+**Validated by**: gmfind check (passed all config.yaml criteria)
 
 **Current config.yaml preferences applied:**
 [Show the relevant settings from config.yaml]
@@ -125,12 +131,12 @@ Ask: "Would you like to purchase [GAME NAME] for [PRICE]? (yes/no)"
 If and only if the user confirmed with "yes", run:
 
 ```bash
-cd /Users/mydev/code/steam-bot && venv/bin/python main.py --buy <APP_ID>
+uv run gmfind buy <APP_ID>
 ```
 
 Report the result:
 - On success: "Successfully purchased [GAME NAME] for [PRICE]!"
-- On failure: Report the error and suggest checking `purchase_failed.png` or running with `--headful` flag for debugging
+- On failure: Report the error and suggest running with `--headful` flag for debugging
 
 ## Dynamic Configuration
 All validation criteria come from `config.yaml`. The user can modify this file anytime to change their preferences:
@@ -153,4 +159,3 @@ Games on `block_list.yaml` are always excluded.
 - Always show the Steam store link so the user can review the game page
 - Always show which website the recommendation came from
 - Slight preference for recent games, but classics within max_game_age_years are welcome
-- If purchase fails, the user can check `purchase_failed.png` for a screenshot
