@@ -5,14 +5,9 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from gmfind.paths import get_config_file
-
-# Load environment variables from .env file
-load_dotenv()
-
 
 # ProtonDB ratings (order matters: best to worst)
 ProtonDBRating = Literal["platinum", "gold", "silver", "bronze", "borked", "unknown"]

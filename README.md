@@ -1,6 +1,8 @@
 # gmfind: Game Finder
 
-A Python CLI tool for recommendations and purchasing of PC games. Steam is the store front that is primarily supported for now. The tool will look for high quality games based on steam and metacritic ratings, look for discounts, view compatibility ratings, and manage your library from the terminal.
+A Python CLI tool for recommendations and purchasing of PC games. Steam is the store front that is primarily supported. 
+
+`gmfind` will look for high quality games based on your configurable preferences for steam and metacritic ratings, discounts and compatibility ratings.
 
 ## Features
 
@@ -55,7 +57,7 @@ export STEAM_PASSWORD="your_password"
 export STEAM_ID="76561198xxxxxxxxx"
 ```
 
-Or create a `.env` file in your working directory.
+Add these to your shell profile (`~/.zshrc` or `~/.bashrc`) to make them permanent.
 
 ### Config Files
 
@@ -115,6 +117,12 @@ Look up a game's Steam App ID by title:
 gmfind id "Hades"
 ```
 Output: `{"steam_id": 1145360, "title": "Hades"}`
+
+### Search by Name
+Look up a game by title and get full details in one command:
+```bash
+gmfind id "Hades II" | jq '.steam_id' | xargs gmfind check
+```
 
 ### Global Options
 ```bash

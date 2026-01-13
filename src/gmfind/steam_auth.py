@@ -29,18 +29,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator, Optional, Tuple
 
-from dotenv import load_dotenv
 from playwright.sync_api import BrowserContext, Page, sync_playwright
 
-# Load environment variables
-load_dotenv()
+from gmfind.paths import get_screenshots_dir, get_session_file
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
-
-# Import path utilities for XDG-compliant paths
-from gmfind.paths import get_screenshots_dir, get_session_file
 
 # Constants (exported for backward compatibility)
 STATE_FILE = get_session_file()

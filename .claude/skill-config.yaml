@@ -1,0 +1,24 @@
+# Shared configuration for Claude skills
+# Edit this file to update all skills at once
+
+default_genres:
+  - Action
+  - Action-Adventure
+  - Action RPG
+  - Platformer
+  - 2D Platformer
+  - Indie
+  - Metroidvania
+  - Adventure
+  - RTS
+  - Strategy
+  - Fighting
+  - Military
+  - FPS
+  - Souls-like
+
+# Year range configuration for search queries
+# Skills will calculate actual years based on current date
+search_years:
+  recent: 3      # For queries like "best games 2024 2025 2026" - recent releases
+  extended: 10   # For queries like "best games since 2016" - broader search

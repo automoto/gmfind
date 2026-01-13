@@ -428,10 +428,9 @@ def check_game(
         "requires_3rd_party_account": data.get("requires_3rd_party_account"),
     }
 
-    # Add recommendation info if any validation was done
-    if data.get("owned") or data.get("blocked") or data.get("fail_reasons"):
-        output["recommended"] = data.get("meets_criteria", True)
-        if not output["recommended"]:
-            output["reasons"] = data.get("fail_reasons", [])
+    # Always add recommendation status
+    output["recommended"] = data.get("meets_criteria", True)
+    if not output["recommended"]:
+        output["reasons"] = data.get("fail_reasons", [])
 
     print(json.dumps(output, indent=2))

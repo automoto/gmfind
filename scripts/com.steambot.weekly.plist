@@ -25,7 +25,7 @@
     <key>StartInterval</key>
     <integer>604800</integer>
 
-    <!-- Environment variables - load from .env file via the shell script -->
+    <!-- Environment variables must be set in shell profile -->
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>

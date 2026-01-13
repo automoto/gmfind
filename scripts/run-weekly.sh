@@ -10,10 +10,8 @@ cd "$(dirname "$0")/.."
 # Create logs directory if needed
 mkdir -p logs
 
-# Load environment variables from .env file
-if [ -f .env ]; then
-    export $(grep -v '^#' .env | xargs)
-fi
+# Note: STEAM_USERNAME, STEAM_PASSWORD, and STEAM_ID must be set
+# in your shell profile (~/.zshrc) for this script to work
 
 # Log start time
 echo "=== gmfind Run: $(date) ===" >> logs/weekly.log

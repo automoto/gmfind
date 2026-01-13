@@ -1,11 +1,11 @@
 ---
-description: Search for PC games matching your preferences (no purchase)
+description: Get PC games and purchase with confirmation
 allowed-tools: Bash, Read, WebSearch
 ---
 
-# Steam Game Recommendation
+# Steam Game Finder (with Purchase Option)
 
-Search the internet for highly-rated PC games and validate them against your preferences. This skill is read-only and will NOT purchase any games.
+Search the internet for highly-rated PC games, validate them, and purchase with user confirmation.
 
 ## Arguments
 - `$ARGUMENTS` - Optional genre(s) to search for. If not provided, randomly selects from defaults.
@@ -15,18 +15,22 @@ Default genres and search year ranges are defined in `.claude/skill-config.yaml`
 
 ## Usage Examples
 ```
-/recommend-game                              # Random genre from defaults
-/recommend-game Metroidvania                 # Single genre
-/recommend-game "Souls-like, Action RPG"     # Multiple genres
+/get-game                              # Random genre from defaults
+/get-game Metroidvania                 # Single genre
+/get-game "Souls-like, Action RPG"     # Multiple genres
 ```
 
 ## Workflow
 
-### Step 1: Load Configuration
-Read skill config, user preferences, and check inventory in parallel:
+### Step 1: Pre-flight Checks
+Run these commands in parallel:
 
 ```bash
 cat .claude/skill-config.yaml
+```
+
+```bash
+gmfind balance
 ```
 
 ```bash
@@ -37,7 +41,12 @@ cat ~/Library/Application\ Support/gmfind/config.yaml
 wc -l ~/Library/Application\ Support/gmfind/inventory_private.csv 2>/dev/null | awk '{print $1 - 1}' || echo "0"
 ```
 
-Display: "Loaded preferences. X owned games will be excluded from recommendations."
+Display summary:
+- "Wallet balance: $X.XX"
+- "Preferences: max_price=$X, min_metacritic=X, protondb=X, steam_deck=X"
+- "X owned games will be excluded"
+
+If balance is $0 or retrieval fails, warn that purchases may fail.
 
 ### Step 2: Parse Genre(s)
 - If `$ARGUMENTS` is empty: pick 1-2 genres from `default_genres` in skill-config.yaml (these are preferred genres for inspiration - choose any that seem interesting)
@@ -56,18 +65,18 @@ Use WebSearch to find highly-rated games. Calculate years from skill-config.yaml
 Extract 5-10 game titles from the search results. Track which source each game came from.
 
 ### Step 4: Resolve Steam IDs
-For each game title, get its Steam App ID using the CLI:
+For each game title, get its Steam App ID:
 
 ```bash
 gmfind id "<game title>"
 ```
 
-This returns JSON: `{"steam_id": 123456, "title": "Game Name"}`
+Returns JSON: `{"steam_id": 123456, "title": "Game Name"}`
 
-Run multiple `gmfind id` calls in parallel when possible. Skip games that return an error or aren't found on Steam.
+Run multiple `gmfind id` calls in parallel when possible. Skip games that aren't found on Steam.
 
 ### Step 5: Validate Each Game
-For each App ID found, validate against your preferences:
+For each App ID found:
 
 ```bash
 gmfind check <APP_ID>
@@ -79,35 +88,47 @@ The CLI validates against ALL criteria in config.yaml:
 
 A game passes if `"recommended": true` in the JSON output.
 
-### Step 6: Present Results
-Display all validated games with source attribution:
+### Step 6: Present Top Recommendation
+Present the FIRST validated game with full details:
 
 ```
-## Recommendations for [Genre]
+## Recommended: [Game Name]
 
-**Preferences applied:** max_price=$X, min_metacritic=X, protondb=X, steam_deck=X
-**Inventory:** X owned games excluded
-
-### 1. [Game Name]
 **Source**: Found via [PC Gamer/Rock Paper Shotgun/etc.]
 **Steam Link**: https://store.steampowered.com/app/[APP_ID]
 
 | Attribute | Value | Requirement | Status |
 |-----------|-------|-------------|--------|
-| Price | $XX.XX | ≤$XX | Pass/Fail |
-| Metacritic | XX | ≥XX | Pass/Fail |
-| ProtonDB | [tier] | ≥[tier] | Pass/Fail |
-| Steam Deck | [status] | ≥[level] | Pass/Fail |
-| Age | X years | ≤X years | Pass/Fail |
-
----
+| Price | $XX.XX | ≤$XX | Pass |
+| Metacritic | XX | ≥XX | Pass |
+| ProtonDB | [tier] | ≥[tier] | Pass |
+| Steam Deck | [status] | ≥[level] | Pass |
+| Age | X years | ≤X years | Pass |
 ```
 
-If no games pass validation, show rejection reasons and suggest adjusting config.yaml.
+### Step 7: Ask for Purchase Confirmation
+**CRITICAL**: You MUST ask the user for explicit confirmation before purchasing.
+
+Ask: "Would you like to purchase [GAME NAME] for [PRICE]? (yes/no)"
+
+- Wait for the user's response
+- Only proceed if they explicitly say "yes"
+- If they say "no" or anything else, do NOT purchase
+
+### Step 8: Execute Purchase (if confirmed)
+If and only if the user confirmed with "yes":
+
+```bash
+gmfind buy <APP_ID>
+```
+
+Report the result:
+- On success: "Successfully purchased [GAME NAME] for [PRICE]!"
+- On failure: Report the error and suggest running with `--headful` flag for debugging
 
 ## Important Notes
-- This skill does NOT purchase games
+- **ALWAYS ask for user confirmation before purchasing**
+- This uses real money from your Steam Wallet
 - Games MUST be available on Steam
-- Always show which website each recommendation came from
-- Always include the Steam store link
-- If all games fail validation, suggest adjusting config.yaml settings
+- Always show the Steam store link so the user can review the game page
+- Always show which website the recommendation came from
