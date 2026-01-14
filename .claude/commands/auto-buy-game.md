@@ -72,23 +72,14 @@ Prompt: "List game titles that match [genre] genre, showing name and discount pe
 
 Extract 10-15 game titles (more candidates = better chances). Track which source each game came from.
 
-### Step 4: Resolve Steam IDs
-For each game title, get its Steam App ID:
+### Step 4: Find First Valid Game
+For each game title in order, check it directly (the CLI resolves the Steam ID automatically):
 
 ```bash
-gmfind id "<game title>"
+gmfind check "<game title>"
 ```
 
-Returns JSON: `{"steam_id": 123456, "title": "Game Name"}`
-
-Run multiple `gmfind id` calls in parallel when possible. Skip games that aren't found on Steam.
-
-### Step 5: Find First Valid Game
-For each App ID in order:
-
-```bash
-gmfind check <APP_ID>
-```
+Run multiple `gmfind check` calls in parallel when possible. Skip games that return an error.
 
 The CLI validates against ALL criteria in config.yaml:
 - Price, Metacritic score, ProtonDB rating, Steam Deck compatibility
@@ -101,7 +92,7 @@ If no games pass validation after checking all candidates:
 - List the most common rejection reasons seen
 - Suggest adjusting config.yaml settings
 
-### Step 6: Execute Purchase
+### Step 5: Execute Purchase
 For the validated game, display details first:
 
 ```
@@ -120,7 +111,7 @@ Then run (using `--auto` to skip CLI confirmation since we've already validated)
 gmfind buy <APP_ID> --auto
 ```
 
-### Step 7: Report Results
+### Step 6: Report Results
 
 **On success**:
 ```

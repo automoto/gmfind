@@ -71,23 +71,14 @@ Prompt: "List game titles that match [genre] genre, showing name and discount pe
 
 Extract 5-10 game titles from the search results. Track which source each game came from.
 
-### Step 4: Resolve Steam IDs
-For each game title, get its Steam App ID:
+### Step 4: Validate Each Game
+For each game title found, check it directly (the CLI resolves the Steam ID automatically):
 
 ```bash
-gmfind id "<game title>"
+gmfind check "<game title>"
 ```
 
-Returns JSON: `{"steam_id": 123456, "title": "Game Name"}`
-
-Run multiple `gmfind id` calls in parallel when possible. Skip games that aren't found on Steam.
-
-### Step 5: Validate Each Game
-For each App ID found:
-
-```bash
-gmfind check <APP_ID>
-```
+Run multiple `gmfind check` calls in parallel when possible. Skip games that return an error.
 
 The CLI validates against ALL criteria in config.yaml:
 - Price, Metacritic score, ProtonDB rating, Steam Deck compatibility
@@ -95,7 +86,7 @@ The CLI validates against ALL criteria in config.yaml:
 
 A game passes if `"recommended": true` in the JSON output.
 
-### Step 6: Present Top Recommendation
+### Step 5: Present Top Recommendation
 Present the FIRST validated game with full details:
 
 ```
@@ -113,7 +104,7 @@ Present the FIRST validated game with full details:
 | Age | X years | ≤X years | Pass |
 ```
 
-### Step 7: Ask for Purchase Confirmation
+### Step 6: Ask for Purchase Confirmation
 **CRITICAL**: You MUST ask the user for explicit confirmation before purchasing.
 
 Ask: "Would you like to purchase [GAME NAME] for [PRICE]? (yes/no)"
@@ -122,7 +113,7 @@ Ask: "Would you like to purchase [GAME NAME] for [PRICE]? (yes/no)"
 - Only proceed if they explicitly say "yes"
 - If they say "no" or anything else, do NOT purchase
 
-### Step 8: Execute Purchase (if confirmed)
+### Step 7: Execute Purchase (if confirmed)
 If and only if the user confirmed with "yes", use `--auto` to skip CLI confirmation (since we already confirmed above):
 
 ```bash

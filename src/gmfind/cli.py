@@ -112,15 +112,26 @@ def cmd_id(args) -> int:
 
 
 def cmd_check(args) -> int:
-    """Handle 'gmfind check <APP_ID>' command."""
+    """Handle 'gmfind check <APP_ID_OR_TITLE>' command."""
     from gmfind.game_check import check_game
+    from gmfind.recommend_metacritic import search_steam
 
     config_path = args.config or str(get_config_file())
     block_list_path = args.block_list or str(get_blocklist_file())
     inventory_path = args.inventory or str(get_inventory_file())
 
+    # Determine if input is an App ID (numeric) or a game title
+    app_id = args.app_id_or_title
+    if not app_id.isdigit():
+        result = search_steam(app_id)
+        if not result:
+            print(f"[ERROR] No Steam match found for: {app_id}", file=sys.stderr)
+            return 1
+        app_id, title = result
+        app_id = str(app_id)
+
     check_game(
-        args.app_id,
+        app_id,
         config_path=config_path,
         block_list_path=block_list_path,
         inventory_path=inventory_path,
@@ -511,7 +522,8 @@ def create_parser() -> argparse.ArgumentParser:
 Examples:
   gmfind init                     Initialize config and install Playwright
   gmfind id "Hades"               Find Steam App ID for a game
-  gmfind check 1145350            Get full game details
+  gmfind check 1145350            Check game by App ID
+  gmfind check "Hades II"         Check game by title (resolves ID automatically)
   gmfind deals 5                  Find top 5 deals
   gmfind buy 1145350              Buy a specific game (with confirmation)
   gmfind buy 1145350 --auto       Buy without confirmation prompt
@@ -567,7 +579,10 @@ Examples:
         "check",
         help="Get full game details (ProtonDB, Deck, price, reviews, ownership)",
     )
-    check_parser.add_argument("app_id", help="Steam App ID to check")
+    check_parser.add_argument(
+        "app_id_or_title",
+        help="Steam App ID or game title to check",
+    )
     _add_config_options(check_parser, config=True, blocklist=True, inventory=True)
     check_parser.set_defaults(func=cmd_check)
 
