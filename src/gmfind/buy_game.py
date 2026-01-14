@@ -241,6 +241,16 @@ def buy_game(app_id, headless=True):
                 logger.info("Game already owned.")
                 return
 
+            # Check for Free to Play / Free content (skips "Install" prompt issues)
+            # "Play Game" or "Free" price usually indicates we shouldn't "buy" it
+            # in the standard way.
+            if (
+                page.get_by_text("Play Game").first.is_visible()
+                or page.locator(".game_purchase_price").filter(has_text="Free").first.is_visible()
+            ):
+                logger.info("Game appears to be Free/Free to Play. Skipping purchase.")
+                return
+
             # Find Add to Cart button
             logger.info("Looking for 'Add to Cart' button...")
             add_btn = None

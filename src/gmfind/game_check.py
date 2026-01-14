@@ -209,9 +209,13 @@ def check_recommendation(
 
             # Price Check
             price = game_data.get("_price_val")
-            if price is not None and price > prefs.max_price:
-                is_recommended = False
-                reasons.append(f"Price ${price} > ${prefs.max_price}")
+            if price is not None:
+                if price == 0:
+                    is_recommended = False
+                    reasons.append("Game is free (auto-buy skips free games)")
+                elif price > prefs.max_price:
+                    is_recommended = False
+                    reasons.append(f"Price ${price} > ${prefs.max_price}")
 
             # Metacritic Check
             meta_score = game_data.get("_metacritic_score")
@@ -345,9 +349,13 @@ def check_game_data(
 
             # Price Check
             price = output.get("price_val")
-            if price is not None and price > prefs.max_price:
-                output["meets_criteria"] = False
-                output["fail_reasons"].append(f"Price ${price:.2f} > ${prefs.max_price:.2f}")
+            if price is not None:
+                if price == 0:
+                    output["meets_criteria"] = False
+                    output["fail_reasons"].append("Game is free (we skip free games)")
+                elif price > prefs.max_price:
+                    output["meets_criteria"] = False
+                    output["fail_reasons"].append(f"Price ${price:.2f} > ${prefs.max_price:.2f}")
 
             # Metacritic Check
             meta_score = output.get("metacritic_score")
