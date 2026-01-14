@@ -261,28 +261,23 @@ def cmd_inventory(args) -> int:
 
 
 def cmd_buy(args) -> int:
-    """Handle 'gmfind buy <APP_ID>' or 'gmfind buy --auto' command."""
+    """Handle 'gmfind buy <APP_ID>' command."""
     config_path = args.config or str(get_config_file())
     inventory_path = args.inventory or str(get_inventory_file())
     block_list_path = args.block_list or str(get_blocklist_file())
     headless = not args.headful
 
-    if args.auto:
-        # Autonomous buy workflow
-        return _run_auto_buy(config_path, inventory_path, block_list_path, headless)
-    else:
-        # Direct buy with validation
-        if not args.app_id:
-            print("[ERROR] App ID required. Usage: gmfind buy <APP_ID> or gmfind buy --auto")
-            return 1
-        return _buy_with_validation(
-            args.app_id,
-            config_path=config_path,
-            inventory_path=inventory_path,
-            block_list_path=block_list_path,
-            headless=headless,
-            force=args.force,
-        )
+    if not args.app_id:
+        print("[ERROR] App ID required. Usage: gmfind buy <APP_ID>")
+        return 1
+    return _buy_with_validation(
+        args.app_id,
+        config_path=config_path,
+        inventory_path=inventory_path,
+        block_list_path=block_list_path,
+        headless=headless,
+        skip_confirm=args.auto,
+    )
 
 
 def _buy_with_validation(
@@ -291,18 +286,13 @@ def _buy_with_validation(
     inventory_path: str,
     block_list_path: str,
     headless: bool = True,
-    force: bool = False,
+    skip_confirm: bool = False,
 ) -> int:
     """Buy a game after validating against config, inventory, and blocklist."""
     from gmfind.buy_game import buy_game
     from gmfind.game_check import check_game_data
 
     logger = logging.getLogger(__name__)
-
-    if force:
-        logger.info(f"Force mode: skipping validation for App ID {app_id}")
-        buy_game(app_id, headless=headless)
-        return 0
 
     # Get game details for validation
     logger.info(f"Checking game details for App ID {app_id}...")
@@ -316,20 +306,19 @@ def _buy_with_validation(
     except Exception as e:
         logger.error(f"Failed to check game: {e}")
         print(f"[ERROR] Failed to validate game: {e}")
-        print("Use --force to skip validation.")
         return 1
+
+    game_title = game_data.get("name", f"App ID {app_id}")
 
     # Check if already owned
     if game_data.get("owned"):
-        print(f"[SKIP] You already own this game (App ID: {app_id})")
-        print("Use --force to buy anyway (e.g., as a gift).")
+        print(f"[SKIP] You already own: {game_title} (App ID: {app_id})")
         return 1
 
     # Check blocklist
     if game_data.get("blocked"):
         blocked_term = game_data.get("blocked_term", "unknown")
-        print(f"[SKIP] Game matches blocklist term: '{blocked_term}'")
-        print("Use --force to buy anyway.")
+        print(f"[SKIP] {game_title} matches blocklist term: '{blocked_term}'")
         return 1
 
     # Check price/preferences (warn but don't block)
@@ -339,12 +328,31 @@ def _buy_with_validation(
         print("[WARNING] Game doesn't meet your preferences:")
         for reason in reasons:
             print(f"  - {reason}")
-        print("\nProceeding with purchase anyway. Use --force to skip this warning.")
+
+    # Confirmation prompt
+    if not skip_confirm:
+        print("\nAbout to purchase:")
+        print(f"  Title:    {game_title}")
+        print(f"  Steam ID: {app_id}")
+        if game_data.get("price"):
+            print(f"  Price:    {game_data['price']}")
+
+        try:
+            response = input("\nProceed with purchase? [y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\nPurchase cancelled.")
+            return 1
+
+        if response not in ("y", "yes"):
+            print("Purchase cancelled.")
+            return 1
 
     # Proceed with purchase
-    logger.info(f"Purchasing App ID {app_id}...")
+    logger.info(f"Purchasing {game_title} (App ID {app_id})...")
     try:
         success = buy_game(app_id, headless=headless)
+        if success:
+            print(f"\n[SUCCESS] Purchased: {game_title} (App ID {app_id})")
         return 0 if success else 1
     except Exception as e:
         logger.error(f"Purchase failed: {e}")
@@ -399,10 +407,19 @@ def _run_auto_buy(
         logger.info("No suitable recommendation found.")
         return 0
 
-    logger.info(f"Recommended App ID: {app_id}")
+    # Fetch game title for logging
+    from gmfind.game_check import fetch_store_data
+
+    try:
+        store_data = fetch_store_data(int(app_id))
+        game_title = store_data.get("name", f"App ID {app_id}")
+    except Exception:
+        game_title = f"App ID {app_id}"
+
+    logger.info(f"Recommended: {game_title} (App ID: {app_id})")
 
     # 4. Buy Game
-    logger.info(f"Attempting to buy App ID {app_id}...")
+    logger.info(f"Attempting to buy {game_title}...")
     success = False
     try:
         success = buy_game(str(app_id), headless=headless)
@@ -411,7 +428,7 @@ def _run_auto_buy(
         return 1
 
     if success:
-        logger.info(f"[VERIFICATION] Purchase of {app_id} successful. Refreshing inventory...")
+        logger.info(f"[VERIFICATION] Purchase of {game_title} successful. Refreshing inventory...")
         # Wait a few seconds for Steam backend to update
         time.sleep(5)
         try:
@@ -420,20 +437,29 @@ def _run_auto_buy(
             owned_ids = get_owned_app_ids(inventory_path)
 
             if int(app_id) in owned_ids:
-                logger.info(f"[VERIFICATION SUCCESS] App ID {app_id} in inventory!")
-                print(f"\n[COMPLETE SUCCESS] Purchased and verified: App ID {app_id}")
+                logger.info(f"[VERIFICATION SUCCESS] {game_title} in inventory!")
+                print(f"\n[SUCCESS] Purchased and verified: {game_title} (App ID {app_id})")
             else:
                 logger.warning(
-                    f"[VERIFICATION UNCERTAIN] Purchase reported success, but App ID "
-                    f"{app_id} not found in inventory yet. Steam might be slow to update."
+                    f"[VERIFICATION UNCERTAIN] Purchase reported success, but {game_title} "
+                    f"(App ID {app_id}) not found in inventory yet. Steam might be slow to update."
                 )
         except Exception as e:
             logger.error(f"[VERIFICATION ERROR] Failed to refresh inventory: {e}")
     else:
-        logger.error(f"[FAILURE] Purchase of App ID {app_id} failed or could not be confirmed.")
+        logger.error(f"[FAILURE] Purchase of {game_title} (App ID {app_id}) failed.")
         return 1
 
     return 0
+
+
+def cmd_rec_buy_auto(args) -> int:
+    """Handle 'gmfind rec-buy-auto' command (autonomous: balance -> recommend -> buy)."""
+    config_path = args.config or str(get_config_file())
+    inventory_path = args.inventory or str(get_inventory_file())
+    block_list_path = args.block_list or str(get_blocklist_file())
+    headless = not args.headful
+    return _run_auto_buy(config_path, inventory_path, block_list_path, headless)
 
 
 # =============================================================================
@@ -487,8 +513,9 @@ Examples:
   gmfind id "Hades"               Find Steam App ID for a game
   gmfind check 1145350            Get full game details
   gmfind deals 5                  Find top 5 deals
-  gmfind buy 1145350              Buy a specific game
-  gmfind buy --auto               Autonomous buy workflow
+  gmfind buy 1145350              Buy a specific game (with confirmation)
+  gmfind buy 1145350 --auto       Buy without confirmation prompt
+  gmfind rec-buy-auto             Autonomous: balance -> recommend -> buy
   gmfind balance                  Check Steam Wallet balance
   gmfind inventory --private      Export game library
   gmfind blocklist "FIFA"         Check if title is blocked
@@ -610,22 +637,25 @@ Examples:
     )
     buy_parser.add_argument(
         "app_id",
-        nargs="?",
         help="Steam App ID to purchase",
     )
     buy_parser.add_argument(
         "--auto",
         action="store_true",
-        help="Autonomous mode: check balance -> recommend -> buy",
-    )
-    buy_parser.add_argument(
-        "--force",
-        "-f",
-        action="store_true",
-        help="Skip validation (buy even if owned/blocked/exceeds preferences)",
+        help="Skip confirmation prompt",
     )
     _add_config_options(buy_parser, config=True, blocklist=True, inventory=True, headful=True)
     buy_parser.set_defaults(func=cmd_buy)
+
+    # --- rec-buy-auto ---
+    rec_buy_auto_parser = subparsers.add_parser(
+        "rec-buy-auto",
+        help="Autonomous workflow: check balance -> recommend -> buy",
+    )
+    _add_config_options(
+        rec_buy_auto_parser, config=True, blocklist=True, inventory=True, headful=True
+    )
+    rec_buy_auto_parser.set_defaults(func=cmd_rec_buy_auto)
 
     return parser
 
