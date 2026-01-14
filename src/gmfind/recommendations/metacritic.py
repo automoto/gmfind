@@ -172,7 +172,7 @@ class MetacriticScraper:
             if len(all_games) < limit:
                 time.sleep(0.5)
 
-        # Shuffle combined results so the final selection isn't just the top of the first year scraped
+        # Shuffle combined results so the selection isn't just the first year scraped
         random.shuffle(all_games)
         return all_games[:limit]
 
@@ -384,7 +384,7 @@ class MetacriticScraper:
         search_normalized = self._normalize_title(search_name)
 
         best_match = None
-        best_score = 0
+        best_score = 0.0
 
         for game in games:
             game_normalized = self._normalize_title(game.name)
@@ -482,7 +482,8 @@ class MetacriticScraper:
 
             # Get metascore
             score_elem = result.select_one(
-                ".c-siteReviewScore span, [data-testid='critic-score'], .c-siteReviewScore_background"
+                ".c-siteReviewScore span, [data-testid='critic-score'], "
+                ".c-siteReviewScore_background"
             )
             metascore = 0
             if score_elem:

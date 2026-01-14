@@ -138,7 +138,9 @@ class MarkdownReportGenerator:
         section = "\n### Discount and Recommendation\n"
         section += "| Original | Sale | Discount |\n"
         section += "|----------|------|----------|\n"
-        section += f"| ${deal.original_price:.2f} | ${deal.sale_price:.2f} | **-{deal.discount_percent}%** |\n"
+        orig = f"${deal.original_price:.2f}"
+        sale = f"${deal.sale_price:.2f}"
+        section += f"| {orig} | {sale} | **-{deal.discount_percent}%** |\n"
 
         # Add recommendation content
         reasons = []

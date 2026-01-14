@@ -74,7 +74,8 @@ class SteamCheckout:
                 logger.info("Found WebAPIToken, clearing cart via API...")
                 self.page.evaluate(
                     """(t) => {
-                    fetch('https://api.steampowered.com/IAccountCartService/DeleteCart/v1?access_token=' + t, {
+                    const url = 'https://api.steampowered.com/IAccountCartService/DeleteCart/v1';
+                    fetch(url + '?access_token=' + t, {
                         method: 'POST',
                         body: new FormData()
                     });
@@ -153,7 +154,7 @@ class SteamCheckout:
                             logger.info(f"Checking SSA checkbox ({s})...")
                             ssa_loc.check()
                     else:
-                        # Just click it if it's a styled element (like a div or span acting as a checkbox)
+                        # Click styled elements (div/span acting as checkbox)
                         logger.info(f"Clicking SSA agreement element ({s})...")
                         ssa_loc.click()
 

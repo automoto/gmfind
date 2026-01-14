@@ -245,8 +245,12 @@ def cmd_inventory(args) -> int:
         try:
             config_path = args.config or str(get_config_file())
             config = load_config(config_path)
-            inventory = SteamInventory(config.steam.steam_id)
-            logger.info(f"Fetching inventory for SteamID {config.steam.steam_id}...")
+            steam_id = config.steam.steam_id
+            if not steam_id:
+                logger.error("Steam ID not configured. Set STEAM_ID env var or in config.")
+                return 1
+            inventory = SteamInventory(steam_id)
+            logger.info(f"Fetching inventory for SteamID {steam_id}...")
             path = inventory.export_inventory_csv(output)
             print(f"\n[SUCCESS] Inventory exported to {path}")
         except Exception as e:
@@ -646,7 +650,8 @@ def main() -> int:
         return 0
 
     # Dispatch to command handler
-    return args.func(args)
+    result: int = args.func(args)
+    return result
 
 
 if __name__ == "__main__":

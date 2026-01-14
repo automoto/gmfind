@@ -37,10 +37,16 @@ steam-bot/
 Use [uv](https://github.com/astral-sh/uv) for dependency management:
 
 ```bash
-# Install package in development mode
-uv pip install -e .
+# Install package in development mode with dev dependencies
+make install
 
 # Initialize Playwright browsers
+make init
+```
+
+Or manually:
+```bash
+uv pip install -e ".[dev]"
 gmfind init
 ```
 
@@ -89,23 +95,27 @@ uv run gmfind inventory --private --output ./games.csv
 
 ### 3. Code Quality Standards
 
-We use `ruff` for linting/formatting and `mypy` for type checking.
+We use `ruff` for linting/formatting and `mypy` for type checking. Use the Makefile commands:
 
 ```bash
-# Format code
-uv run ruff format .
+# Run all checks (lint + type-check) - required before committing
+make check
 
-# Lint (with auto-fix)
-uv run ruff check --fix .
+# Individual commands
+make lint         # Run ruff linter
+make format       # Format code with ruff
+make type-check   # Run mypy type checker
 
-# Type check
-uv run mypy src/gmfind
-
-# Run all checks
-uv run ruff check . && uv run mypy src/gmfind
+# Run tests
+uv run pytest tests/ -v
 ```
 
-**Do not commit code that fails these checks.**
+**Do not commit code that fails `make check`.**
+
+To see all available make commands:
+```bash
+make help
+```
 
 ### 4. Implementation Guidelines
 
@@ -136,7 +146,7 @@ dev = [
 
 After modifying:
 ```bash
-uv pip install -e .
+make install
 ```
 
 ### 6. Configuration System
