@@ -281,51 +281,16 @@ def buy_game(app_id, headless=True):
                 logger.info("Game already owned.")
                 return
 
-            # Check for Free to Play / Free content (skips "Install" prompt issues)
-            # "Play Game" or "Free" price usually indicates we shouldn't "buy" it
-            # in the standard way.
-            if (
-                page.get_by_text("Play Game").first.is_visible()
-                or page.locator(".game_purchase_price").filter(has_text="Free").first.is_visible()
-            ):
-                print("      Game is Free/Free to Play. Skipping.", flush=True)
-                logger.info("Game appears to be Free/Free to Play. Skipping purchase.")
-                return
-
-            # Find Add to Cart button
+            # Find and click Add to Cart button
             print("[3/5] Adding to cart...", flush=True)
             logger.info("Looking for 'Add to Cart' button...")
-            add_btn = None
-            cart_selectors = [
-                ".btn_addtocart a",
-                "a:has-text('Add to Cart')",
-                "#btn_add_to_cart",
-                "[data-tooltip-text='Add to Cart']",
-            ]
 
-            for selector in cart_selectors:
-                try:
-                    if page.is_visible(selector):
-                        add_btn = page.locator(selector).first
-                        logger.info(f"Found Add to Cart with selector: {selector}")
-                        break
-                except Exception:
-                    continue
-
-            if not add_btn:
-                try:
-                    add_btn = page.wait_for_selector(".btn_addtocart a", timeout=3000)
-                except Exception:
-                    pass
-
-            if add_btn:
-                add_btn.click()
-                print("      Added to cart.", flush=True)
-            else:
-                print("      Add to cart button not found.", flush=True)
-                logger.error("Add to cart button not found.")
-                page.screenshot(path=str(get_screenshots_dir() / "add_to_cart_failed.png"))
-                return False
+            cart_btn = page.get_by_text("Add to Cart", exact=True).first
+            cart_btn.wait_for(state="visible", timeout=10000)
+            cart_btn.click()
+            print("      Added to cart.", flush=True)
+            logger.info("Clicked Add to Cart")
+            time.sleep(2)
 
             # 2. Checkout
             return checkout.checkout_with_wallet()
