@@ -4,10 +4,9 @@ import csv
 import datetime
 import logging
 import random
-import re
 import time
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -48,13 +47,42 @@ def search_steam_for_app_id(game_name: str) -> int | None:
     return result[0] if result else None
 
 
+def normalize(s: str) -> str:
+    """Normalize a string for comparison by keeping only alphanumeric chars.
+
+    Args:
+        s: Input string to normalize.
+
+    Returns:
+        Lowercase string with only alphanumeric characters.
+    """
+    return "".join(c.lower() for c in s if c.isalnum())
+
+
+def _extract_app_id_from_url(url: str) -> int | None:
+    """Extract Steam app ID from a URL using urllib.parse.
+
+    Args:
+        url: A Steam URL like '/app/12345/Game_Name/' or full URL.
+
+    Returns:
+        The app ID as an integer, or None if not found.
+    """
+    if not url:
+        return None
+
+    path = urlparse(url).path
+    parts = path.strip("/").split("/")
+
+    try:
+        app_idx = parts.index("app")
+        return int(parts[app_idx + 1])
+    except (ValueError, IndexError):
+        return None
+
+
 def search_steam(game_name: str) -> tuple[int, str] | None:
     """Search Steam for a game and return (app_id, title) or None."""
-
-    # Simple normalization for comparison
-    def normalize(s):
-        return re.sub(r"[^a-z0-9]", "", s.lower())
-
     requested_norm = normalize(game_name)
     if not requested_norm:
         return None
@@ -87,11 +115,11 @@ def search_steam(game_name: str) -> tuple[int, str] | None:
                 or result_norm in requested_norm
             ):
                 href = str(result.get("href", ""))
-                match = re.search(r"/app/(\d+)", href)
-                if match:
-                    app_id = int(match.group(1))
+                app_id = _extract_app_id_from_url(href)
+                if app_id:
                     logger.info(
-                        f"  - Search match: '{result_name}' for query '{game_name}' (AppID: {app_id})"
+                        f"  - Search match: '{result_name}' for query "
+                        f"'{game_name}' (AppID: {app_id})"
                     )
                     return (app_id, result_name)
 

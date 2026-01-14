@@ -4,6 +4,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -50,9 +51,68 @@ class MetacriticScraper:
         "Accept-Language": "en-US,en;q=0.5",
     }
 
+    # -------------------------------------------------------------------------
+    # Nuxt.js Review Extraction Patterns
+    # -------------------------------------------------------------------------
+    # These regex patterns extract review data from Metacritic's embedded
+    # JavaScript (window.__NUXT__). The data is stored in JavaScript object
+    # notation (NOT valid JSON), making regex the pragmatic choice over
+    # adding a JavaScript parser dependency.
+    #
+    # Example format in the script:
+    #   {publicationName:"IGN",score:100,quote:"A masterpiece",url:"https://..."}
+    #
+    # We extract each field type separately and align them by position.
+    # -------------------------------------------------------------------------
+
+    # Matches: publicationName:"IGN" -> captures "IGN"
+    _NUXT_PUBLICATION_PATTERN = re.compile(r'publicationName:"([^"]+)"')
+
+    # Matches: score:100 (but not metascore:100) -> captures "100"
+    # The negative lookbehind (?<![a-zA-Z]) prevents matching "metascore"
+    _NUXT_SCORE_PATTERN = re.compile(r"(?<![a-zA-Z])score:(\d+)")
+
+    # Matches: quote:"A masterpiece..." -> captures the quote text
+    _NUXT_QUOTE_PATTERN = re.compile(r'quote:"([^"]+)"')
+
+    # Matches: url:"https://..." -> captures the external review URL
+    _NUXT_URL_PATTERN = re.compile(r'url:"(https?://[^"]+)"')
+
     def __init__(self):
         """Initialize the scraper."""
         self._cache: list[MetacriticGame] = []
+
+    def _extract_slug_from_url(self, url: str) -> str:
+        """Extract game slug from a Metacritic URL using urllib.parse.
+
+        Handles URL formats:
+        - /game/pc/elden-ring/
+        - /game/elden-ring/
+        - https://www.metacritic.com/game/pc/elden-ring/
+
+        Args:
+            url: A Metacritic game URL.
+
+        Returns:
+            The game slug (e.g., 'elden-ring'), or empty string if not found.
+        """
+        if not url:
+            return ""
+
+        path = urlparse(url).path.strip("/")
+        parts = path.split("/")
+
+        # URL format: game/[pc/]slug or just the path after /game/
+        if "game" not in parts:
+            return ""
+
+        game_idx = parts.index("game")
+        # Get parts after 'game', skip 'pc' if present
+        for part in parts[game_idx + 1 :]:
+            if part and part != "pc":
+                return part
+
+        return ""
 
     def fetch_top_rated_games(
         self, min_score: int = 75, limit: int = 500, min_year: int | None = None
@@ -222,10 +282,8 @@ class MetacriticScraper:
             url = link_elem.get("href", "")
             if not url.startswith("http"):
                 url = f"{self.BASE_URL}{url}"
-            # Extract slug from URL
-            slug_match = re.search(r"/game/(?:pc/)?([^/]+)", url)
-            if slug_match:
-                slug = slug_match.group(1)
+            # Extract slug from URL using path parsing
+            slug = self._extract_slug_from_url(url)
 
         # Find metascore
         score_elem = card.select_one(
@@ -416,9 +474,8 @@ class MetacriticScraper:
             if not url.startswith("http"):
                 url = f"{self.BASE_URL}{url}"
 
-            # Extract slug from URL (e.g., /game/warhammer-40000-space-marine-ii/)
-            slug_match = re.search(r"/game/([^/]+)/?", url)
-            slug = slug_match.group(1) if slug_match else ""
+            # Extract slug from URL using path parsing
+            slug = self._extract_slug_from_url(url)
 
             if not slug:
                 return None
@@ -543,38 +600,29 @@ class MetacriticScraper:
         return None
 
     def _extract_reviews_via_regex(self, script_text: str) -> list[dict] | None:
-        """Extract review data using regex patterns.
+        """Extract review data from Nuxt.js embedded JavaScript using regex.
 
-        The Nuxt data uses JavaScript object syntax like:
-        publicationName:"Gamereactor UK",score:100,quote:"...",url:"..."
+        Metacritic embeds review data in window.__NUXT__ using JavaScript object
+        notation (not valid JSON). This method uses regex patterns to extract
+        the structured data. See class-level pattern constants for details.
 
         Args:
             script_text: The raw script content containing __NUXT__ data.
 
         Returns:
-            List of review dictionaries or None.
+            List of review dictionaries with keys:
+            - publicationName: Name of the reviewing outlet
+            - score: Numeric score (0-100)
+            - quote: Review quote/snippet
+            - url: External URL to full review (optional)
+
+            Returns None if no reviews found.
         """
-        reviews = []
-
-        # Pattern to find review blocks with publication, score, and quote
-        # Look for patterns like: publicationName:"Name",publicationSlug:"slug",...,score:100,...,quote:"..."
-        # We'll extract each field individually and pair them by position
-
-        # Find all publication names
-        pub_pattern = r'publicationName:"([^"]+)"'
-        publications = re.findall(pub_pattern, script_text)
-
-        # Find all scores (numeric values after "score:")
-        score_pattern = r"(?<![a-zA-Z])score:(\d+)"
-        scores = re.findall(score_pattern, script_text)
-
-        # Find all quotes
-        quote_pattern = r'quote:"([^"]+)"'
-        quotes = re.findall(quote_pattern, script_text)
-
-        # Find all URLs (external review URLs)
-        url_pattern = r'url:"(https?://[^"]+)"'
-        urls = re.findall(url_pattern, script_text)
+        # Extract each field type using the pre-compiled patterns
+        publications = self._NUXT_PUBLICATION_PATTERN.findall(script_text)
+        scores = self._NUXT_SCORE_PATTERN.findall(script_text)
+        quotes = self._NUXT_QUOTE_PATTERN.findall(script_text)
+        urls = self._NUXT_URL_PATTERN.findall(script_text)
 
         # Match them up - they should appear in order in the data
         # Take the minimum length to avoid misalignment
@@ -587,6 +635,7 @@ class MetacriticScraper:
             )
             return None
 
+        reviews = []
         for i in range(count):
             try:
                 review = {

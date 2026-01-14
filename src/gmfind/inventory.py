@@ -1,7 +1,7 @@
 """Steam inventory checker - fetches user's owned games."""
 
 import logging
-import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
 import requests
@@ -76,27 +76,32 @@ class SteamInventory:
         return games
 
     def _parse_games_xml(self, xml_content: str) -> list[OwnedGame]:
-        """Parse the games XML response from Steam."""
+        """Parse the games XML response from Steam using xml.etree.
+
+        Args:
+            xml_content: Raw XML string from Steam's games endpoint.
+
+        Returns:
+            List of OwnedGame objects parsed from the XML.
+        """
         games = []
-        game_pattern = re.compile(
-            r"<game>.*?<appID>(\d+)</appID>.*?<name><!\[CDATA\[(.*?)\]\]></name>.*?"
-            r"<hoursOnRecord>([\d.]+)</hoursOnRecord>.*?</game>",
-            re.DOTALL,
-        )
-        game_pattern_no_hours = re.compile(
-            r"<game>.*?<appID>(\d+)</appID>.*?<name><!\[CDATA\[(.*?)\]\]></name>.*?</game>",
-            re.DOTALL,
-        )
+        try:
+            root = ET.fromstring(xml_content)
+            for game_elem in root.findall(".//game"):
+                app_id_text = game_elem.findtext("appID")
+                name = game_elem.findtext("name")
+                hours_text = game_elem.findtext("hoursOnRecord", "0")
 
-        for match in game_pattern.finditer(xml_content):
-            games.append(
-                OwnedGame(int(match.group(1)), match.group(2), int(float(match.group(3)) * 60))
-            )
-
-        matched_ids = {g.app_id for g in games}
-        for match in game_pattern_no_hours.finditer(xml_content):
-            if int(match.group(1)) not in matched_ids:
-                games.append(OwnedGame(int(match.group(1)), match.group(2), 0))
+                if app_id_text and name:
+                    try:
+                        app_id = int(app_id_text)
+                        playtime_minutes = int(float(hours_text) * 60)
+                        games.append(OwnedGame(app_id, name, playtime_minutes))
+                    except ValueError:
+                        logger.debug(f"Failed to parse game: appID={app_id_text}, name={name}")
+                        continue
+        except ET.ParseError as e:
+            logger.warning(f"Failed to parse games XML: {e}")
 
         return games
 

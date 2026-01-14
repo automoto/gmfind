@@ -3,15 +3,38 @@
 import csv
 import json
 import logging
-import re
 import time
 from dataclasses import dataclass
+from typing import Any
+from urllib.parse import urlparse
 
 from playwright.sync_api import Page
 
 from gmfind.steam_auth import STATE_FILE, get_authenticated_context, login
 
 logger = logging.getLogger(__name__)
+
+
+def extract_app_id_from_url(url: str) -> int | None:
+    """Extract Steam app ID from a URL using urllib.parse.
+
+    Args:
+        url: A Steam URL like '/app/12345/Game_Name/' or full URL.
+
+    Returns:
+        The app ID as an integer, or None if not found.
+    """
+    if not url:
+        return None
+
+    path = urlparse(url).path
+    parts = path.strip("/").split("/")
+
+    try:
+        app_idx = parts.index("app")
+        return int(parts[app_idx + 1])
+    except (ValueError, IndexError):
+        return None
 
 
 @dataclass
@@ -22,22 +45,109 @@ class OwnedGame:
     title: str
 
 
-def extract_games_from_html(html_content: str) -> list[OwnedGame]:
+def _extract_render_context(html_content: str) -> dict[str, Any] | None:
+    """Extract render context from window.SSR.renderContext using string operations.
+
+    Steam embeds data in a double-escaped JSON string inside JSON.parse().
+    Format: window.SSR.renderContext=JSON.parse("...");
+
+    Args:
+        html_content: The HTML page content.
+
+    Returns:
+        Parsed render context dict, or None if not found.
     """
-    Extract games from the user's Steam library page HTML using embedded JSON.
+    marker_start = 'window.SSR.renderContext=JSON.parse("'
+    start_idx = html_content.find(marker_start)
+    if start_idx == -1:
+        return None
+
+    start_idx += len(marker_start)
+    # Find the closing ");
+    end_idx = html_content.find('");', start_idx)
+    if end_idx == -1:
+        return None
+
+    json_str = html_content[start_idx:end_idx]
+
+    try:
+        # Unescape the JS string by parsing it as a JSON string literal
+        render_context_str = json.loads(f'"{json_str}"')
+        result: dict[str, Any] = json.loads(render_context_str)
+        return result
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
+def _extract_loader_data(html_content: str) -> list[Any] | None:
+    """Extract loader data from window.SSR.loaderData using string operations.
+
+    Legacy fallback format: window.SSR.loaderData = [...];
+
+    Args:
+        html_content: The HTML page content.
+
+    Returns:
+        Parsed loader data list, or None if not found.
+    """
+    # Look for the start marker (with optional whitespace)
+    marker = "window.SSR.loaderData"
+    start_idx = html_content.find(marker)
+    if start_idx == -1:
+        return None
+
+    # Find the equals sign and opening bracket
+    equals_idx = html_content.find("=", start_idx)
+    if equals_idx == -1:
+        return None
+
+    # Find the opening bracket
+    bracket_idx = html_content.find("[", equals_idx)
+    if bracket_idx == -1:
+        return None
+
+    # Find matching closing bracket by counting brackets
+    depth = 1
+    end_idx = bracket_idx + 1
+    while end_idx < len(html_content) and depth > 0:
+        char = html_content[end_idx]
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+        end_idx += 1
+
+    if depth != 0:
+        return None
+
+    json_str = html_content[bracket_idx:end_idx]
+
+    try:
+        result: list[Any] = json.loads(json_str)
+        return result
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
+def extract_games_from_html(html_content: str) -> list[OwnedGame]:
+    """Extract games from the user's Steam library page HTML using embedded JSON.
+
+    Tries multiple extraction strategies:
+    1. window.SSR.renderContext - Modern Steam format
+    2. window.SSR.loaderData - Legacy fallback
+
+    Args:
+        html_content: The HTML page content.
+
+    Returns:
+        List of OwnedGame objects extracted from the page.
     """
     games = []
 
     # Strategy 1: Extract from window.SSR.renderContext
-    # Steam embeds data in a double-escaped JSON string inside JSON.parse()
-    match = re.search(r'window\.SSR\.renderContext=JSON\.parse\("(.*?)"\);', html_content)
-    if match:
+    render_context = _extract_render_context(html_content)
+    if render_context:
         try:
-            # Unescape the JS string by parsing it as a JSON string literal
-            json_str = match.group(1)
-            render_context_str = json.loads(f'"{json_str}"')
-            render_context = json.loads(render_context_str)
-
             query_data_str = render_context.get("queryData", "{}")
             query_data = json.loads(query_data_str)
 
@@ -60,13 +170,12 @@ def extract_games_from_html(html_content: str) -> list[OwnedGame]:
                         logger.info(f"Extracted {len(games)} games from renderContext")
                         return games
         except Exception as e:
-            logger.debug(f"Failed to extract from renderContext: {e}")
+            logger.debug(f"Failed to parse renderContext data: {e}")
 
     # Strategy 2: Extract from window.SSR.loaderData (legacy fallback)
-    match = re.search(r"window\.SSR\.loaderData\s*=\s*(\[.*?\]);", html_content)
-    if match:
+    loader_data = _extract_loader_data(html_content)
+    if loader_data:
         try:
-            loader_data = json.loads(match.group(1))
             for item in loader_data:
                 if isinstance(item, str) and "OwnedGames" in item:
                     data = json.loads(item)
@@ -77,7 +186,7 @@ def extract_games_from_html(html_content: str) -> list[OwnedGame]:
                         if app_id and name:
                             games.append(OwnedGame(app_id=int(app_id), title=str(name)))
         except Exception as e:
-            logger.debug(f"Failed to extract from loaderData: {e}")
+            logger.debug(f"Failed to parse loaderData: {e}")
 
     return games
 
@@ -132,10 +241,9 @@ def fetch_games_from_library(page: Page) -> list[OwnedGame]:
             try:
                 link = row.locator("a[href*='/app/']").first
                 href = link.get_attribute("href") or ""
-                app_match = re.search(r"/app/(\d+)", href)
-                if not app_match:
+                app_id = extract_app_id_from_url(href)
+                if not app_id:
                     continue
-                app_id = int(app_match.group(1))
                 title_elem = row.locator("[class*='GameName'], [class*='gamename']").first
                 title = title_elem.inner_text().strip() if title_elem.count() > 0 else ""
                 if not title:
@@ -154,10 +262,13 @@ def fetch_games_from_library(page: Page) -> list[OwnedGame]:
         for row in game_rows:
             try:
                 row_id = row.get_attribute("id") or ""
-                app_match = re.search(r"game_(\d+)", row_id)
-                if not app_match:
+                # Extract app ID from row ID format: "game_12345"
+                if not row_id.startswith("game_"):
                     continue
-                app_id = int(app_match.group(1))
+                try:
+                    app_id = int(row_id[5:])  # Skip "game_" prefix
+                except ValueError:
+                    continue
                 title_elem = row.locator(".gameListRowItemName").first
                 title = title_elem.inner_text().strip() if title_elem.count() > 0 else ""
                 if title and app_id:
