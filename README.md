@@ -62,8 +62,7 @@ Add these to your shell profile (`~/.zshrc` or `~/.bashrc`) to make them permane
 ### Config Files
 
 Config files are stored in platform-specific locations:
-- **Linux**: `~/.config/gmfind/`
-- **macOS**: `~/Library/Application Support/gmfind/`
+- **Linux/macOS**: `~/.config/gmfind/`
 - **Windows**: `%APPDATA%\gmfind\`
 
 Files:
@@ -238,8 +237,7 @@ Then rebuild and publish.
 When errors occur during login or purchase, screenshots are automatically saved for debugging.
 
 **File locations** (platform-specific):
-- **Linux**: `~/.cache/gmfind/`
-- **macOS**: `~/Library/Caches/gmfind/`
+- **Linux/macOS**: `~/.cache/gmfind/`
 - **Windows**: `%LOCALAPPDATA%\gmfind\Cache\`
 
 **Troubleshooting files:**
