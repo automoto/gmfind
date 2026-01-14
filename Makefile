@@ -1,4 +1,4 @@
-.PHONY: install init lint format type-check check clean help
+.PHONY: install init lint format type-check check test clean help
 .PHONY: balance inventory deals auto-buy schedule unschedule
 .PHONY: build publish-test publish
 
@@ -15,6 +15,7 @@ help:
 	@echo "  make format       Format code with ruff"
 	@echo "  make type-check   Run mypy type checker"
 	@echo "  make check        Run all checks (lint + type-check)"
+	@echo "  make test         Run pytest tests"
 	@echo "  make clean        Remove cache files"
 	@echo ""
 	@echo "Publishing:"
@@ -54,6 +55,9 @@ type-check:
 	uv run mypy src/gmfind
 
 check: lint type-check
+
+test:
+	uv run pytest tests/
 
 clean:
 	rm -rf dist/ .mypy_cache .ruff_cache .pytest_cache
