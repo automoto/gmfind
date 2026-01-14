@@ -129,31 +129,26 @@ class SteamAuth:
         """
         content = page.content().lower()
 
-        # Check for email code prompt (most common)
-        # Steam shows "Enter the code from your email address"
+        # Check for email code prompt
         if "enter the code from your email" in content:
             return "email"
 
-        if "check your email" in content:
+        if "check your email" in content and "code" in content:
+            return "email"
+
+        # Check for email code modal class
+        if "loginauthcodemodal" in content:
             return "email"
 
         # Check for mobile authenticator modal
         if "logintwofactorcodemodal" in content:
             return "mobile"
 
-        if "mobile authenticator" in content:
+        if "enter the code from your mobile authenticator" in content:
             return "mobile"
 
-        if "steam guard mobile" in content:
+        if "steam guard mobile authenticator" in content:
             return "mobile"
-
-        # Generic Steam Guard check - but be careful not to match help text
-        if "steam guard" in content and "enter" in content:
-            return "email"
-
-        # Check for email code modal class
-        if "loginauthcodemodal" in content:
-            return "email"
 
         return None
 
@@ -229,12 +224,24 @@ class SteamAuth:
         """Detect login errors."""
         content = page.content().lower()
 
+        # Check for password/account error phrases (use partial matching)
+        if "check your password" in content or "check your account" in content:
+            return "Incorrect username or password"
+
+        if "password" in content and "incorrect" in content:
+            return "Incorrect username or password"
+
+        if "account name" in content and "incorrect" in content:
+            return "Incorrect username or password"
+
+        if "too many login" in content or "too many attempts" in content:
+            return "Rate limited - too many login attempts"
+
         # Look for specific error message elements/classes
-        # Steam shows errors in specific containers
         error_selectors = [
             '[class*="FormError"]',
-            '[class*="error"]',
             ".newlogindialog_FormError",
+            '[class*="Error"]',
         ]
 
         for selector in error_selectors:
@@ -242,20 +249,17 @@ class SteamAuth:
                 error_elem = page.locator(selector).first
                 if error_elem.is_visible():
                     error_text = error_elem.inner_text().lower()
-                    if "incorrect" in error_text or "invalid" in error_text:
+                    if not error_text.strip():
+                        continue
+                    if "password" in error_text or "account" in error_text:
                         return "Incorrect username or password"
-                    if "too many" in error_text or "rate" in error_text:
+                    if "too many" in error_text:
                         return "Rate limited - too many login attempts"
+                    # Return the actual error text if it looks like an error
+                    if len(error_text) < 200:
+                        return f"Login error: {error_text.strip()}"
             except Exception:
                 pass
-
-        # Fallback: check for very specific error phrases in page content
-        # Be very specific to avoid false positives
-        if "please check your password and account name and try again" in content:
-            return "Incorrect username or password"
-
-        if "too many login failures" in content:
-            return "Rate limited - too many login attempts"
 
         return None
 
@@ -331,10 +335,13 @@ class SteamAuth:
                     page.screenshot(path=str(get_screenshots_dir() / "login_error_username.png"))
                     return False
 
+                print(f"Entering username: {self._username}", flush=True)
                 logger.info("Entering username...")
                 username_input.click()
+                time.sleep(0.2)
+                username_input.fill("")  # Clear first
                 username_input.fill(self._username)
-                time.sleep(0.3)
+                time.sleep(0.5)
 
                 # Find and fill password
                 password_input = self._find_password_input(page)
@@ -343,10 +350,14 @@ class SteamAuth:
                     page.screenshot(path=str(get_screenshots_dir() / "login_error_password.png"))
                     return False
 
+                print("Entering password...", flush=True)
                 logger.info("Entering password...")
                 password_input.click()
-                password_input.fill(self._password)
-                time.sleep(0.3)
+                time.sleep(0.2)
+                password_input.fill("")  # Clear first
+                # Use type() instead of fill() for password - more reliable with special chars
+                password_input.type(self._password, delay=50)
+                time.sleep(0.5)
 
                 # Find and click submit button
                 submit_btn = self._find_submit_button(page)
@@ -378,14 +389,22 @@ class SteamAuth:
             # Check for successful login FIRST
             if self._is_logged_in(page):
                 logger.info("Login successful!")
+                print("[SUCCESS] Login successful!", flush=True)
                 # Sync cookies across Steam domains
                 page.goto(STEAM_COMMUNITY_URL, wait_until="domcontentloaded")
                 time.sleep(1)
                 self._save_session(context)
                 return True
 
-            # Check for 2FA prompt BEFORE errors
-            # (2FA prompt should not be confused with an error)
+            # Check for errors BEFORE 2FA (error pages might contain 2FA-like text)
+            error = self._detect_error(page)
+            if error:
+                logger.error(f"Login failed: {error}")
+                print(f"\n[ERROR] Login failed: {error}", flush=True)
+                page.screenshot(path=str(get_screenshots_dir() / "login_failed.png"))
+                return False
+
+            # Check for 2FA prompt
             twofa_type = self._detect_2fa_prompt(page)
             if twofa_type:
                 logger.info(f"2FA prompt detected: {twofa_type}")
@@ -402,6 +421,7 @@ class SteamAuth:
 
                 if not code:
                     logger.error("No code entered, aborting login")
+                    print("[ERROR] No code entered, aborting login", flush=True)
                     return False
 
                 logger.info("Entering 2FA code...")
@@ -412,14 +432,8 @@ class SteamAuth:
                 start_time = time.time()
                 continue  # Go back to check login status
 
-            # Check for errors (only if no 2FA prompt detected)
-            error = self._detect_error(page)
-            if error:
-                logger.error(f"Login failed: {error}")
-                page.screenshot(path=str(get_screenshots_dir() / "login_failed.png"))
-                return False
-
         logger.error("Login timed out")
+        print("[ERROR] Login timed out", flush=True)
         page.screenshot(path=str(get_screenshots_dir() / "login_timeout.png"))
         return False
 
@@ -489,17 +503,18 @@ def get_authenticated_context(
             browser.close()
 
 
-def login(force: bool = False) -> bool:
+def login(force: bool = False, headless: bool = True) -> bool:
     """
     Simple login function for backward compatibility.
 
     Args:
         force: Force re-login even if session exists
+        headless: Run browser in headless mode (set False to see browser)
 
     Returns:
         True if login successful
     """
-    auth = SteamAuth()
+    auth = SteamAuth(headless=headless)
     return auth.login(force=force)
 
 

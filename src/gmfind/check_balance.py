@@ -6,18 +6,18 @@ from playwright.sync_api import sync_playwright
 from gmfind.steam_auth import STATE_FILE, USER_AGENT, login
 
 
-def get_balance() -> float | None:
+def get_balance(headless: bool = True) -> float | None:
     """Check Steam Wallet balance and return as float."""
     if not os.path.exists(STATE_FILE):
         print(f"[INFO] Session file '{STATE_FILE}' not found. Attempting login...")
-        login()
+        login(headless=headless)
         if not os.path.exists(STATE_FILE):
             print("[ERROR] Login failed. Cannot check balance.")
             return None
 
     print("Launching browser...")
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=headless)
         context = browser.new_context(storage_state=STATE_FILE, user_agent=USER_AGENT)
         page = context.new_page()
 

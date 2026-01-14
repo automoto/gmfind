@@ -378,7 +378,7 @@ def _run_auto_buy(
     logger.info(f"Max configured price: ${max_price:.2f}")
 
     # 2. Check Balance
-    balance = get_balance()
+    balance = get_balance(headless=headless)
     if balance is None:
         logger.error("Could not retrieve wallet balance. Aborting.")
         return 1

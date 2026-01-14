@@ -309,12 +309,13 @@ def export_inventory_csv(games: list[OwnedGame], filename: str = "inventory_priv
     return filename
 
 
-def fetch_and_export(filename: str = "inventory_private.csv") -> str:
+def fetch_and_export(filename: str = "inventory_private.csv", headless: bool = True) -> str:
     """
     Main function: Login, fetch games, and export to CSV.
 
     Args:
         filename: Output CSV filename
+        headless: Run browser in headless mode
 
     Returns:
         Path to the created file
@@ -325,13 +326,13 @@ def fetch_and_export(filename: str = "inventory_private.csv") -> str:
     # Ensure we're logged in
     if not STATE_FILE.exists():
         logger.info("No session found, performing login...")
-        if not login():
+        if not login(headless=headless):
             raise RuntimeError("Failed to login to Steam")
 
     # Fetch games using authenticated session
     logger.info("Fetching game library...")
 
-    with get_authenticated_context() as (context, page):
+    with get_authenticated_context(headless=headless) as (context, page):
         games = fetch_games_from_library(page)
 
     # Export to CSV (empty CSV with headers if no games)

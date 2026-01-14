@@ -1,106 +1,92 @@
-"""Cross-platform path management for gmfind.
-
-Uses platformdirs for XDG-compliant paths on Linux/macOS
-and appropriate locations on Windows.
-
-Directory structure:
-    ~/.config/gmfind/           # Config files (config.yaml, block_list.yaml)
-    ~/.local/share/gmfind/      # Data files (session, inventory exports)
-    ~/.cache/gmfind/            # Cache (logs)
-"""
+"""Cross-platform path management using XDG paths on Linux/macOS, AppData on Windows."""
 
 import os
+import sys
 from pathlib import Path
 
 from platformdirs import user_cache_path, user_config_path, user_data_path
 
 APP_NAME = "gmfind"
-APP_AUTHOR = "gmfind"  # Used on Windows
+APP_AUTHOR = "gmfind"
 
 
 def get_config_dir() -> Path:
-    """Get the configuration directory.
-
-    Linux/macOS: ~/.config/gmfind/
-    Windows: C:/Users/<user>/AppData/Local/gmfind/
-
-    Environment variable override: GMFIND_CONFIG_DIR
-    """
+    """~/.config/gmfind/ (override: GMFIND_CONFIG_DIR)"""
     if env_path := os.environ.get("GMFIND_CONFIG_DIR"):
         return Path(env_path)
-    return user_config_path(APP_NAME, APP_AUTHOR, ensure_exists=True)
+
+    if sys.platform == "win32":
+        return user_config_path(APP_NAME, APP_AUTHOR, ensure_exists=True)
+
+    xdg_config = os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
+    path = Path(xdg_config) / APP_NAME
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def get_data_dir() -> Path:
-    """Get the data directory for session and exports.
-
-    Linux/macOS: ~/.local/share/gmfind/
-    Windows: C:/Users/<user>/AppData/Local/gmfind/
-
-    Environment variable override: GMFIND_DATA_DIR
-    """
+    """~/.local/share/gmfind/ (override: GMFIND_DATA_DIR)"""
     if env_path := os.environ.get("GMFIND_DATA_DIR"):
         return Path(env_path)
-    return user_data_path(APP_NAME, APP_AUTHOR, ensure_exists=True)
+
+    if sys.platform == "win32":
+        return user_data_path(APP_NAME, APP_AUTHOR, ensure_exists=True)
+
+    xdg_data = os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
+    path = Path(xdg_data) / APP_NAME
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def get_cache_dir() -> Path:
-    """Get the cache directory for logs.
-
-    Linux/macOS: ~/.cache/gmfind/
-    Windows: C:/Users/<user>/AppData/Local/gmfind/Cache/
-
-    Environment variable override: GMFIND_CACHE_DIR
-    """
+    """~/.cache/gmfind/ (override: GMFIND_CACHE_DIR)"""
     if env_path := os.environ.get("GMFIND_CACHE_DIR"):
         return Path(env_path)
-    return user_cache_path(APP_NAME, APP_AUTHOR, ensure_exists=True)
+
+    if sys.platform == "win32":
+        return user_cache_path(APP_NAME, APP_AUTHOR, ensure_exists=True)
+
+    xdg_cache = os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")
+    path = Path(xdg_cache) / APP_NAME
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
-# Specific file paths
 def get_config_file() -> Path:
-    """Get config.yaml path."""
     return get_config_dir() / "config.yaml"
 
 
 def get_blocklist_file() -> Path:
-    """Get block_list.yaml path."""
     return get_config_dir() / "block_list.yaml"
 
 
 def get_session_file() -> Path:
-    """Get steam_browser_auth.json path."""
     return get_data_dir() / "steam_browser_auth.json"
 
 
 def get_inventory_file(filename: str = "inventory_private.csv") -> Path:
-    """Get inventory CSV path."""
     return get_data_dir() / filename
 
 
 def get_reports_dir() -> Path:
-    """Get reports directory for markdown output."""
     reports_dir = get_data_dir() / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     return reports_dir
 
 
 def get_log_dir() -> Path:
-    """Get logs directory."""
     log_dir = get_cache_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
 
 
 def get_screenshots_dir() -> Path:
-    """Get screenshots directory for error debugging."""
     screenshots_dir = get_cache_dir() / "screenshots"
     screenshots_dir.mkdir(parents=True, exist_ok=True)
     return screenshots_dir
 
 
 def get_log_file() -> Path:
-    """Get main log file path."""
     return get_log_dir() / "gmfind.log"
 
 
