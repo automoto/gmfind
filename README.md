@@ -88,10 +88,15 @@ gmfind deals --output ./deals.md   # Save to file
 ### Purchase a Game
 Buy a game by App ID (validates against your config first):
 ```bash
-gmfind buy 1145350            # Buy specific game
-gmfind buy 1145350 --force    # Skip validation checks
+gmfind buy 1145350            # Buy specific game (shows confirmation prompt)
+gmfind buy 1145350 --auto     # Skip confirmation prompt
 gmfind buy 1145350 --headful  # Show browser window
-gmfind buy --auto             # Autonomous: balance -> recommend -> buy
+```
+
+### Autonomous Buy
+Automatically find a recommended game and purchase it:
+```bash
+gmfind rec-buy-auto           # Check balance -> recommend -> buy
 ```
 
 ### Check Wallet Balance

@@ -1,6 +1,6 @@
 ---
 description: Get PC games and purchase with confirmation
-allowed-tools: Bash, Read, WebSearch
+allowed-tools: Bash, Read, WebSearch, WebFetch
 ---
 
 # Steam Game Finder (with Purchase Option)
@@ -34,11 +34,11 @@ gmfind balance
 ```
 
 ```bash
-cat ~/Library/Application\ Support/gmfind/config.yaml
+cat ~/.config/gmfind/config.yaml
 ```
 
 ```bash
-wc -l ~/Library/Application\ Support/gmfind/inventory_private.csv 2>/dev/null | awk '{print $1 - 1}' || echo "0"
+wc -l ~/.local/share/gmfind/inventory_private.csv 2>/dev/null | awk '{print $1 - 1}' || echo "0"
 ```
 
 Display summary:
@@ -49,18 +49,25 @@ Display summary:
 If balance is $0 or retrieval fails, warn that purchases may fail.
 
 ### Step 2: Parse Genre(s)
-- If `$ARGUMENTS` is empty: pick 1-2 genres from `default_genres` in skill-config.yaml (these are preferred genres for inspiration - choose any that seem interesting)
+- If `$ARGUMENTS` is empty: than just search for games without a genre
 - If `$ARGUMENTS` contains commas: split into multiple genres and search each
 - Otherwise: use `$ARGUMENTS` as a single genre
 
 Tell the user which genre(s) you're searching for.
 
 ### Step 3: Search for Games
-Use WebSearch to find highly-rated games. Calculate years from skill-config.yaml (e.g., if `recent: 2` and current year is 2026, use "2025 2026"). Run 2-3 queries in parallel:
+Use WebSearch to find highly-rated games. Calculate years from skill-config.yaml (e.g., if `recent: 2` and current year is 2026, use "2025 2026"). Run 2-4 queries in parallel:
 
 1. **Recent + highly rated**: `best [genre] PC games [recent years] Steam highly rated`
 2. **Gaming sites**: `site:pcgamer.com OR site:rockpapershotgun.com best [genre] games since [current_year - extended]`
 3. **Budget-friendly** (if max_price < $20): `best [genre] PC games Steam under $[max_price]`
+4. **Steam 250 deals**: `site:steam250.com [genre] discounts OR deals`
+
+Also use WebFetch to check Steam 250 discounts directly:
+```
+WebFetch: https://steam250.com/discounts
+Prompt: "List game titles that match [genre] genre, showing name and discount percentage"
+```
 
 Extract 5-10 game titles from the search results. Track which source each game came from.
 
@@ -116,15 +123,17 @@ Ask: "Would you like to purchase [GAME NAME] for [PRICE]? (yes/no)"
 - If they say "no" or anything else, do NOT purchase
 
 ### Step 8: Execute Purchase (if confirmed)
-If and only if the user confirmed with "yes":
+If and only if the user confirmed with "yes", use `--auto` to skip CLI confirmation (since we already confirmed above):
 
 ```bash
-gmfind buy <APP_ID>
+gmfind buy <APP_ID> --auto
 ```
 
-Report the result:
-- On success: "Successfully purchased [GAME NAME] for [PRICE]!"
-- On failure: Report the error and suggest running with `--headful` flag for debugging
+The CLI will display:
+- `[SUCCESS] Purchased: [GAME NAME] (App ID [APP_ID])` on success
+- Error details on failure
+
+On failure, suggest running with `--headful` flag for debugging.
 
 ## Important Notes
 - **ALWAYS ask for user confirmation before purchasing**

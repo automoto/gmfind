@@ -1,34 +1,6 @@
-# Developer Guide (AGENT.md)
+# Developer Guide
 
-This guide provides instructions for AI agents and developers working on the gmfind codebase.
-
-## Project Structure
-
-```
-steam-bot/
-├── pyproject.toml              # Package config, dependencies, entry points
-├── src/gmfind/                 # Main package
-│   ├── __init__.py             # Version info
-│   ├── __main__.py             # python -m gmfind support
-│   ├── cli.py                  # CLI entry point (argparse subcommands)
-│   ├── config.py               # Configuration loading (Pydantic)
-│   ├── paths.py                # XDG-compliant path handling
-│   ├── setup.py                # Post-install setup (Playwright browsers)
-│   ├── steam_auth.py           # Headless authentication (Playwright Sync)
-│   ├── buy_game.py             # Purchase logic
-│   ├── check_balance.py        # Wallet balance checking
-│   ├── game_check.py           # Game details aggregator
-│   ├── find_deals.py           # Deal discovery from Steam API
-│   ├── report_generator.py     # Markdown report generation
-│   ├── blocklist_checker.py    # Game title filtering
-│   ├── inventory.py            # API-based library export
-│   ├── inventory_private.py    # Browser-based library export
-│   └── recommendations/        # Rating clients
-│       ├── __init__.py
-│       ├── protondb.py         # ProtonDB API
-│       ├── steam_deck.py       # Steam Deck verification
-│       └── metacritic.py       # Metacritic scraper
-```
+This guide provides instructions for developers or AI agents working on the gmfind codebase.
 
 ## Development Workflow
 
@@ -70,8 +42,8 @@ gmfind <command>
 | `check <APP_ID>` | Get game details (price, ProtonDB, Deck, reviews) | No |
 | `deals [COUNT]` | Find discounted games | No |
 | `balance` | Check Steam Wallet balance | Yes |
-| `buy <APP_ID>` | Purchase a game | Yes |
-| `buy --auto` | Autonomous buy workflow | Yes |
+| `buy <APP_ID>` | Purchase a game (with confirmation) | Yes |
+| `rec-buy-auto` | Autonomous: balance -> recommend -> buy | Yes |
 | `inventory --private` | Export library via browser | Yes |
 | `inventory --public` | Export library via API | No |
 | `blocklist <TITLE>` | Check if title matches blocklist | No |
@@ -83,7 +55,7 @@ Commands that filter games accept these options:
 - `--block-list PATH` - Path to block_list.yaml
 - `--inventory PATH` - Path to inventory CSV
 - `--headful` - Run browser visibly (for `buy`, `inventory --private`)
-- `--force` - Skip validation (for `buy`)
+- `--auto` - Skip confirmation prompt (for `buy`)
 
 **Examples:**
 ```bash
