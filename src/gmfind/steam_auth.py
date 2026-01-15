@@ -22,16 +22,20 @@ Usage:
         pass
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Optional, Tuple
-
-from playwright.sync_api import BrowserContext, Page, sync_playwright
+from typing import TYPE_CHECKING, Generator, Optional, Tuple
 
 from gmfind.paths import get_screenshots_dir, get_session_file
+from gmfind.playwright_utils import get_sync_playwright
+
+if TYPE_CHECKING:
+    from playwright.sync_api import BrowserContext, Page
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -270,7 +274,7 @@ class SteamAuth:
 
         # Quick validation - try loading the session and checking logged in status
         try:
-            with sync_playwright() as p:
+            with get_sync_playwright()() as p:
                 browser = p.chromium.launch(headless=True)
                 context = browser.new_context(
                     storage_state=str(self.state_file),
@@ -307,7 +311,7 @@ class SteamAuth:
 
         logger.info(f"Starting login for user: {self._username}")
 
-        with sync_playwright() as p:
+        with get_sync_playwright()() as p:
             browser = p.chromium.launch(headless=self.headless)
             context = browser.new_context(
                 user_agent=USER_AGENT,
@@ -485,7 +489,7 @@ def get_authenticated_context(
     if not auth.ensure_logged_in():
         raise RuntimeError("Failed to authenticate with Steam")
 
-    with sync_playwright() as p:
+    with get_sync_playwright()() as p:
         browser = p.chromium.launch(headless=headless)
         context = browser.new_context(
             storage_state=str(state_file),

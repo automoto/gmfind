@@ -33,7 +33,7 @@ Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv).
 # Install globally as a CLI tool
 uv tool install gmfind
 
-# Initialize (installs Playwright browsers and creates config templates)
+# Initialize (creates config templates)
 gmfind init
 ```
 
@@ -41,6 +41,24 @@ Alternative with pipx:
 ```bash
 pipx install gmfind
 gmfind init
+```
+
+### Browser Commands (Optional)
+
+Some commands require Playwright for browser automation (see [Command Reference](#command-reference) below). To enable these:
+
+```bash
+# Install Playwright
+pip install playwright
+
+# Download Chromium browser
+playwright install chromium
+```
+
+Or install gmfind with browser support in one step:
+```bash
+uv tool install 'gmfind[browser]'
+playwright install chromium
 ```
 
 ### For Developers
@@ -68,6 +86,29 @@ Config files are stored in platform-specific locations:
 Files:
 - `config.yaml` - Preferences (max price, min ratings, etc.)
 - `block_list.yaml` - Game title patterns to exclude
+
+## Command Reference
+
+Commands are divided into two categories based on their dependencies:
+
+### API Commands (No Playwright Required)
+These work immediately after installation:
+| Command | Description |
+|---------|-------------|
+| `gmfind check <APP_ID>` | Get game details (price, ratings, compatibility) |
+| `gmfind deals [N]` | Find N discounted games matching your preferences |
+| `gmfind id "<TITLE>"` | Look up a game's Steam App ID |
+| `gmfind blocklist "<TITLE>"` | Check if a title matches your blocklist |
+| `gmfind inventory --public` | Export game library (requires public Steam profile) |
+
+### Browser Commands (Playwright Required)
+These require Playwright installation (see [Browser Commands](#browser-commands-optional)):
+| Command | Description |
+|---------|-------------|
+| `gmfind buy <APP_ID>` | Purchase a game using Steam Wallet |
+| `gmfind balance` | Check your Steam Wallet balance |
+| `gmfind inventory --private` | Export game library (works with private profiles) |
+| `gmfind rec-buy-auto` | Autonomous recommend and purchase workflow |
 
 ## Usage
 

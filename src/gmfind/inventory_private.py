@@ -1,16 +1,19 @@
 """Steam inventory fetcher for private profiles using authenticated browser session."""
 
+from __future__ import annotations
+
 import csv
 import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
-from playwright.sync_api import Page
-
 from gmfind.steam_auth import STATE_FILE, get_authenticated_context, login
+
+if TYPE_CHECKING:
+    from playwright.sync_api import Page
 
 logger = logging.getLogger(__name__)
 

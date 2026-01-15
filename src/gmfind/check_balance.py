@@ -1,8 +1,7 @@
 import os
 import re
 
-from playwright.sync_api import sync_playwright
-
+from gmfind.playwright_utils import get_sync_playwright
 from gmfind.steam_auth import STATE_FILE, USER_AGENT, login
 
 
@@ -16,7 +15,7 @@ def get_balance(headless: bool = True) -> float | None:
             return None
 
     print("Launching browser...")
-    with sync_playwright() as p:
+    with get_sync_playwright()() as p:
         browser = p.chromium.launch(headless=headless)
         context = browser.new_context(storage_state=STATE_FILE, user_agent=USER_AGENT)
         page = context.new_page()

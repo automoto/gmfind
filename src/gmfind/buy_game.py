@@ -5,9 +5,8 @@ import logging
 import os
 import time
 
-from playwright.sync_api import sync_playwright
-
 from gmfind.paths import get_screenshots_dir
+from gmfind.playwright_utils import get_sync_playwright
 from gmfind.steam_auth import STATE_FILE, USER_AGENT, login
 
 # Setup basic logging
@@ -247,7 +246,7 @@ def buy_game(app_id, headless=True):
     print(f"\nStarting purchase for App ID: {app_id}", flush=True)
     logger.info(f"Launching browser to buy AppID: {app_id}...")
 
-    with sync_playwright() as p:
+    with get_sync_playwright()() as p:
         browser = p.chromium.launch(headless=headless)
         context = browser.new_context(storage_state=STATE_FILE, user_agent=USER_AGENT)
         page = context.new_page()

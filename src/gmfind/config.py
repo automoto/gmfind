@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 from typing import Literal
 
+import msgspec
 import yaml
-from pydantic import BaseModel, Field
 
 from gmfind.paths import get_config_file
 
@@ -18,23 +18,32 @@ SteamDeckLevel = Literal["verified", "playable", "unsupported", "unknown"]
 STEAM_DECK_LEVEL_ORDER = ["verified", "playable", "unsupported", "unknown"]
 
 
-class SteamConfig(BaseModel):
+class SteamConfig(msgspec.Struct):
     """Steam account configuration."""
 
-    username: str | None = Field(default=None)
-    password: str | None = Field(default=None)
-    steam_id: str | None = Field(default=None)
+    username: str | None = None
+    password: str | None = None
+    steam_id: str | None = None
 
 
-class PreferencesConfig(BaseModel):
+class PreferencesConfig(msgspec.Struct):
     """Game preference configuration."""
 
-    max_price: float = Field(default=20.0, gt=0)
-    min_metacritic_score: int = Field(default=75, ge=0, le=100)
-    require_metacritic_score: bool = Field(default=False)
-    min_protondb_rating: ProtonDBRating = Field(default="gold")
-    max_game_age_years: int = Field(default=20, ge=1, le=50)
-    min_steam_deck_level: SteamDeckLevel = Field(default="playable")
+    max_price: float = 20.0
+    min_metacritic_score: int = 75
+    require_metacritic_score: bool = False
+    min_protondb_rating: ProtonDBRating = "gold"
+    max_game_age_years: int = 20
+    min_steam_deck_level: SteamDeckLevel = "playable"
+
+    def __post_init__(self) -> None:
+        """Validate field constraints."""
+        if self.max_price <= 0:
+            raise ValueError("max_price must be greater than 0")
+        if not 0 <= self.min_metacritic_score <= 100:
+            raise ValueError("min_metacritic_score must be between 0 and 100")
+        if not 1 <= self.max_game_age_years <= 50:
+            raise ValueError("max_game_age_years must be between 1 and 50")
 
     def meets_protondb_rating(self, rating: str) -> bool:
         """Check if a game's ProtonDB rating meets the minimum requirement."""
@@ -52,16 +61,14 @@ class PreferencesConfig(BaseModel):
             return False
         min_index = STEAM_DECK_LEVEL_ORDER.index(self.min_steam_deck_level)
         level_index = STEAM_DECK_LEVEL_ORDER.index(level_lower)
-        # Order is verified (0), playable (1), unsupported (2), unknown (3)
-        # So we want level_index <= min_index
         return level_index <= min_index
 
 
-class Config(BaseModel):
+class Config(msgspec.Struct):
     """Main configuration model."""
 
     steam: SteamConfig
-    preferences: PreferencesConfig = Field(default_factory=PreferencesConfig)
+    preferences: PreferencesConfig = msgspec.field(default_factory=PreferencesConfig)
 
 
 def load_config(config_path: str | Path | None = None, require_credentials: bool = True) -> Config:
@@ -80,7 +87,7 @@ def load_config(config_path: str | Path | None = None, require_credentials: bool
     Raises:
         FileNotFoundError: If config file doesn't exist.
         ValueError: If required credentials are missing (when require_credentials=True).
-        pydantic.ValidationError: If configuration is invalid.
+        msgspec.ValidationError: If configuration is invalid.
     """
     # Use XDG default if no path specified
     if config_path is None:
@@ -150,8 +157,6 @@ def load_config(config_path: str | Path | None = None, require_credentials: bool
         steam_id=steam_id,
     )
 
-    # Only unpack preferences if they match the model
-    # For simplicity, we just pass the dict since Pydantic handles validation
     preferences_config = PreferencesConfig(**preferences)
 
     return Config(steam=steam_config, preferences=preferences_config)

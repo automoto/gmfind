@@ -3,7 +3,7 @@
 Handles:
 1. Creating config directories
 2. Generating example config files
-3. Installing Playwright browsers
+3. Installing Playwright browsers (optional)
 """
 
 import subprocess
@@ -21,8 +21,25 @@ from gmfind.paths import (
 )
 
 
+def is_playwright_installed() -> bool:
+    """Check if Playwright is installed."""
+    try:
+        import playwright  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
 def install_playwright_browsers() -> bool:
-    """Install Playwright Chromium browser."""
+    """Install Playwright Chromium browser if Playwright is installed."""
+    if not is_playwright_installed():
+        print("Playwright is not installed. Skipping browser installation.")
+        print("Browser commands (buy, balance, inventory --private) require Playwright.")
+        print("\nTo enable browser commands, install Playwright:")
+        print("  pip install playwright && playwright install chromium")
+        return True  # Not a failure, just skipped
+
     print("Installing Playwright Chromium browser...")
     print("This may take a few minutes on first run.\n")
 
@@ -37,7 +54,7 @@ def install_playwright_browsers() -> bool:
         print(f"Error installing Playwright browsers: {e}")
         return False
     except FileNotFoundError:
-        print("Error: Playwright not found. Please reinstall gmfind.")
+        print("Error: Playwright module not found.")
         return False
 
 
@@ -65,15 +82,17 @@ def print_env_instructions() -> None:
     print("SETUP COMPLETE")
     print("=" * 60)
     print("\nNext steps:")
-    print("\n1. Set your Steam credentials as environment variables:")
-    print("   export STEAM_USERNAME='your_username'")
-    print("   export STEAM_PASSWORD='your_password'")
-    print("   export STEAM_ID='76561198xxxxxxxxx'")
-    print("\n   Add these to your ~/.bashrc, ~/.zshrc, or shell profile.")
-    print("\n2. Edit your config file:")
+    print("\n1. Edit your config file:")
     print(f"   {get_config_file()}")
-    print("\n3. Run your first command:")
+    print("\n2. Try a command that works without login:")
     print("   gmfind deals 2")
+    print("   gmfind check 1145350")
+    print("\n3. For browser commands (buy, balance, inventory --private):")
+    print("   a. Install Playwright: pip install playwright && playwright install chromium")
+    print("   b. Set Steam credentials:")
+    print("      export STEAM_USERNAME='your_username'")
+    print("      export STEAM_PASSWORD='your_password'")
+    print("      export STEAM_ID='76561198xxxxxxxxx'")
     print("=" * 60 + "\n")
 
 
