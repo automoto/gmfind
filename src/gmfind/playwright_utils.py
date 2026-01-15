@@ -24,8 +24,11 @@ def get_sync_playwright() -> Any:
     except ImportError:
         sys.exit(
             "This command requires Playwright browser automation.\n\n"
-            "Install with:\n"
+            "Install with pip:\n"
             "  pip install playwright && playwright install chromium\n\n"
+            "If installed via Homebrew:\n"
+            "  $(brew --prefix gmfind)/libexec/bin/python -m pip install playwright\n"
+            "  playwright install chromium\n\n"
             "Or install gmfind with browser support:\n"
             "  pip install 'gmfind[browser]'"
         )

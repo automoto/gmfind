@@ -27,17 +27,19 @@ We recommend adding a small amount to your Steam Wallet and testing with `--head
 
 ### For Users
 
-Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv).
-
+**With Homebrew (macOS):**
 ```bash
-# Install globally as a CLI tool
-uv tool install gmfind
+brew tap automoto/gmfind
+brew install gmfind
+```
 
-# Initialize (creates config templates)
+**With uv:**
+```bash
+uv tool install gmfind
 gmfind init
 ```
 
-Alternative with pipx:
+**With pipx:**
 ```bash
 pipx install gmfind
 gmfind init
@@ -47,11 +49,14 @@ gmfind init
 
 Some commands require Playwright for browser automation (see [Command Reference](#command-reference) below). To enable these:
 
+**If installed via pip/uv/pipx:**
 ```bash
-# Install Playwright
-pip install playwright
+pip install playwright && playwright install chromium
+```
 
-# Download Chromium browser
+**If installed via Homebrew:**
+```bash
+$(brew --prefix gmfind)/libexec/bin/python -m pip install playwright
 playwright install chromium
 ```
 
