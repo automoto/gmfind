@@ -21,25 +21,8 @@ from gmfind.paths import (
 )
 
 
-def is_playwright_installed() -> bool:
-    """Check if Playwright is installed."""
-    try:
-        import playwright  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
-
-
 def install_playwright_browsers() -> bool:
-    """Install Playwright Chromium browser if Playwright is installed."""
-    if not is_playwright_installed():
-        print("Playwright is not installed. Skipping browser installation.")
-        print("Browser commands (buy, balance, inventory --private) require Playwright.")
-        print("\nTo enable browser commands, install Playwright:")
-        print("  pip install playwright && playwright install chromium")
-        return True  # Not a failure, just skipped
-
+    """Install Playwright Chromium browser."""
     print("Installing Playwright Chromium browser...")
     print("This may take a few minutes on first run.\n")
 
@@ -87,9 +70,8 @@ def print_env_instructions() -> None:
     print("\n2. Try a command that works without login:")
     print("   gmfind deals 2")
     print("   gmfind check 1145350")
-    print("\n3. For browser commands (buy, balance, inventory --private):")
-    print("   a. Install Playwright: pip install playwright && playwright install chromium")
-    print("   b. Set Steam credentials:")
+    print("\n3. For browser commands (buy, balance, inventory --private),")
+    print("   set Steam credentials:")
     print("      export STEAM_USERNAME='your_username'")
     print("      export STEAM_PASSWORD='your_password'")
     print("      export STEAM_ID='76561198xxxxxxxxx'")
