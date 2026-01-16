@@ -47,7 +47,7 @@ gmfind init
 
 ### Browser Commands (Optional)
 
-Some commands require Pl aywright for browser automation (see [Command Reference](#command-reference) below). To enable these:
+Some commands require Playwright for browser automation (see [Command Reference](#command-reference) below). To enable these:
 
 **If installed via pip/uv/pipx:**
 ```bash
