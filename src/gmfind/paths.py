@@ -104,7 +104,7 @@ def get_example_config() -> str:
     """Return example config.yaml content."""
     return """preferences:
   # Maximum price in USD for a game purchase
-  max_price: 50.00
+  max_price: 25.00
 
   # Minimum Metacritic score (0-100)
   min_metacritic_score: 75

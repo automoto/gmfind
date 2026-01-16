@@ -16,12 +16,12 @@ A Python CLI tool for recommendations and purchasing of PC games. Steam is the s
 
 **Purchases use Steam Wallet only.** This tool will never use credit cards, PayPal, or any external payment methods. All purchases are made exclusively from your Steam Wallet balance.
 
-- The `gmfind buy` command validates games against your config before purchasing
-- Use `gmfind buy --auto` with caution - it will automatically purchase a recommended game
-- Set a conservative `max_price` in your config to limit spending
-- Your Steam Wallet balance acts as a natural spending cap
+- **Validation**: The `gmfind buy <APP_ID>` command validates games against your price preferences, inventory, and blocklist before proceeding.
+- **Autonomous Buying**: The `gmfind rec-buy-auto` command is fully autonomous—it will check your balance, find a suitable recommendation, and purchase it without user intervention.
+- **Auto-Confirm**: Using the `--auto` flag with the `buy` command skips the final confirmation prompt.
+- **Spending Caps**: Your Steam Wallet balance acts as a natural spending cap. We strongly recommend setting a conservative `max_price` in your `config.yaml`.
 
-We recommend adding a small amount to your Steam Wallet and testing with `--headful` mode first to observe the purchase flow before enabling autonomous buying.
+We recommend testing with `--headful` mode first to observe the purchase flow before enabling autonomous buying.
 
 ## Installation
 
@@ -47,7 +47,7 @@ gmfind init
 
 ### Browser Commands (Optional)
 
-Some commands require Playwright for browser automation (see [Command Reference](#command-reference) below). To enable these:
+Some commands require Pl aywright for browser automation (see [Command Reference](#command-reference) below). To enable these:
 
 **If installed via pip/uv/pipx:**
 ```bash
@@ -56,8 +56,11 @@ pip install playwright && playwright install chromium
 
 **If installed via Homebrew:**
 ```bash
+# 1. Install the Playwright library into Homebrew's private environment
 $(brew --prefix gmfind)/libexec/bin/python -m pip install playwright
-playwright install chromium
+
+# 2. Install the browsers (using the same environment)
+$(brew --prefix gmfind)/libexec/bin/python -m playwright install chromium
 ```
 
 Or install gmfind with browser support in one step:
