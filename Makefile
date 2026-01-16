@@ -112,3 +112,7 @@ publish-test: build
 publish: build
 	uv pip install twine
 	uv run twine upload --repository pypi --verbose dist/*
+
+sha: build
+	@echo "SHA256 of release artifacts:"
+	@shasum -a 256 dist/*.tar.gz || sha256sum dist/*.tar.gz
