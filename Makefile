@@ -1,6 +1,6 @@
 .PHONY: install init lint format type-check check test clean help
 .PHONY: balance inventory deals auto-buy schedule unschedule
-.PHONY: build publish-test publish
+.PHONY: build publish-test publish sha
 
 # Default target
 help:
@@ -20,6 +20,7 @@ help:
 	@echo ""
 	@echo "Publishing:"
 	@echo "  make build        Build package (dist/)"
+	@echo "  make sha          Show SHA256 of built files"
 	@echo "  make publish-test Upload to TestPyPI"
 	@echo "  make publish      Upload to PyPI"
 	@echo ""
@@ -98,6 +99,15 @@ schedule-status:
 	@tail -20 logs/weekly.log 2>/dev/null || echo "No logs yet"
 
 # ============ Publishing ============
+
+sha:
+	@if [ -d dist ]; then \
+		for f in dist/*; do \
+			echo "$$(shasum -a 256 "$$f" | cut -d' ' -f1)  $$(basename $$f)"; \
+		done; \
+	else \
+		echo "No dist/ directory. Run 'make build' first."; \
+	fi
 
 build: clean
 	uv pip install build

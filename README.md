@@ -55,11 +55,9 @@ pip install playwright && playwright install chromium
 ```
 
 **If installed via Homebrew:**
+To enable browser commands, run once after installation:
 ```bash
-# 1. Install the Playwright library into Homebrew's private environment
-$(brew --prefix gmfind)/libexec/bin/python -m pip install playwright
-
-# 2. Install the browsers (using the same environment)
+# Install the browsers (using the same environment)
 $(brew --prefix gmfind)/libexec/bin/python -m playwright install chromium
 ```
 
