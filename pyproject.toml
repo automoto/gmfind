@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gmfind"
-version = "0.1.10"
+version = "0.1.11"
 description = "Steam automation CLI - find games, check deals, purchase, and manage your Steam library"
 readme = "README.md"
 license = "MIT"
@@ -28,7 +28,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "httpx>=0.25.0",
     "requests>=2.31.0",
     "beautifulsoup4>=4.12.0",
     "pyyaml>=6.0",
