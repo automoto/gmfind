@@ -25,46 +25,40 @@ We recommend testing with `--headful` mode first to observe the purchase flow be
 
 ## Installation
 
-### For Users
+### Homebrew (macOS/Linux)
 
-**With Homebrew (macOS):**
 ```bash
 brew tap automoto/gmfind
 brew install gmfind
-```
 
-**With uv:**
-```bash
-uv tool install gmfind
-gmfind init
-```
-
-**With pipx:**
-```bash
-pipx install gmfind
-gmfind init
-```
-
-### Browser Commands (Optional)
-
-Some commands require Playwright for browser automation (see [Command Reference](#command-reference) below). To enable these:
-
-**If installed via pip/uv/pipx:**
-```bash
-pip install playwright && playwright install chromium
-```
-
-**If installed via Homebrew:**
-To enable browser commands, run once after installation:
-```bash
-# Install the browsers (using the same environment)
+# Install browser binaries (required for browser commands)
 $(brew --prefix gmfind)/libexec/bin/python -m playwright install chromium
 ```
 
-Or install gmfind with browser support in one step:
+### uv
+
 ```bash
-uv tool install 'gmfind[browser]'
+uv tool install gmfind
 playwright install chromium
+```
+
+### pip / pipx
+
+```bash
+# With pip
+pip install gmfind
+playwright install chromium
+
+# With pipx
+pipx install gmfind
+playwright install chromium
+```
+
+### Verify Installation
+
+```bash
+gmfind --version
+gmfind init  # creates default config files
 ```
 
 ### For Developers
@@ -95,9 +89,9 @@ Files:
 
 ## Command Reference
 
-Commands are divided into two categories based on their dependencies:
+Commands are divided into two categories:
 
-### API Commands (No Playwright Required)
+### API Commands
 These work immediately after installation:
 | Command | Description |
 |---------|-------------|
@@ -107,8 +101,8 @@ These work immediately after installation:
 | `gmfind blocklist "<TITLE>"` | Check if a title matches your blocklist |
 | `gmfind inventory --public` | Export game library (requires public Steam profile) |
 
-### Browser Commands (Playwright Required)
-These require Playwright installation (see [Browser Commands](#browser-commands-optional)):
+### Browser Commands
+These require browser binaries (`playwright install chromium`):
 | Command | Description |
 |---------|-------------|
 | `gmfind buy <APP_ID>` | Purchase a game using Steam Wallet |
